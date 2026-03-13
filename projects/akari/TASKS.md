@@ -2,10 +2,11 @@
 
 ## Meta-project setup
 
-- [ ] Adapt the self-improvement measurement plan to your own repo [requires-opus] [skill: design] [zero-resource]
+- [x] Adapt the self-improvement measurement plan to your own repo [requires-opus] [skill: design] [zero-resource]
   Why: The public examples show the pattern, but each deployment needs its own metrics, denominators, and failure modes.
   Done when: A repo-specific measurement plan exists with 3-5 concrete metrics and explicit data sources.
   Priority: high
+  Completed: 2026-03-14. See `plans/measurement-plan-openakari.md`.
 
 - [ ] Measure human intervention rate in your deployment [fleet-eligible] [skill: analyze] [zero-resource]
   Why: A decreasing intervention rate is one of the clearest signals that the system is becoming more autonomous.

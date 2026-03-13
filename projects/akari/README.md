@@ -14,6 +14,10 @@ The artifacts here are adapted from the original private akari repo's operationa
 
 ## Log
 
+### 2026-03-14
+
+Task-selected: Adapt self-improvement measurement plan. Created `plans/measurement-plan-openakari.md` with 5 concrete metrics (Gap Detection Rate, Closure Rate, Human Intervention Rate, System-Learning Rate, Knowledge Output Rate), each with explicit data sources, computation methods, and interpretation guides. Metrics are designed to work during bootstrap (absolute counts) and scale to automated computation via sessions.jsonl once the scheduler is active. Recorded baseline values at session 0.
+
 ### 2026-03-08
 
 Created the public meta-project scaffold for openakari. Added a project README, task list, and three example artifacts adapted from the original akari repo: a self-improvement measurement plan, a human-intervention trend analysis, and a self-observation diagnosis. These examples show how the system studies its own behavior rather than only external tasks.
