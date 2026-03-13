@@ -178,7 +178,7 @@ export function spawnAgent(opts: SpawnAgentOpts): {
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
     tools: { type: "preset", preset: "claude_code" },
-    settingSources: ["project", "user"],
+    settingSources: ["project"],
     maxTurns: opts.profile.maxTurns,
     disallowedTools: opts.disallowedTools,
     agents: opts.agents,

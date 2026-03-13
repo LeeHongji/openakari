@@ -254,7 +254,7 @@ function spawnClaudeCli(
 
   const proc = spawn(claudeBin, args, {
     cwd,
-    stdio: ["pipe", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
     env: cleanEnv(opts.extraEnv) as Record<string, string>,
   });
 
@@ -304,13 +304,8 @@ function spawnClaudeCli(
         setTimeout(() => { if (!proc.killed) proc.kill("SIGKILL"); }, 5000);
       }
     },
-    async streamInput(input: AsyncIterable<SDKUserMessage>) {
-      if (!proc.stdin || proc.stdin.destroyed) return;
-      for await (const msg of input) {
-        const line = JSON.stringify({ type: "user", message: msg }) + "\n";
-        proc.stdin.write(line);
-      }
-    },
+    // streamInput not available when stdin is "ignore" — would need to respawn with stdin: "pipe"
+    // If interactive input is needed, use the supervised backend with stdin enabled.
   };
 
   const result = new Promise<QueryResult>((resolve, reject) => {
