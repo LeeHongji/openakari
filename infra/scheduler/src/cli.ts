@@ -239,9 +239,6 @@ async function cmdStart(): Promise<void> {
   console.log(`[startup] ${instanceCheck.message}`);
   acquireLock(lockfilePath);
 
-  // Set up living message disk persistence directory
-  setPersistenceDir(persistBaseDir);
-
   // Track HEAD before each job for verification
   const headBeforeMap = new Map<string, string | null>();
 
