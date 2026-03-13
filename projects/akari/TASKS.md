@@ -13,10 +13,11 @@
   Done when: A short analysis computes intervention events per session over at least 2 time windows and records the result.
   Priority: medium
 
-- [ ] Write one self-observation diagnosis from operational evidence [requires-opus] [skill: diagnose] [zero-resource]
+- [x] Write one self-observation diagnosis from operational evidence [requires-opus] [skill: diagnose] [zero-resource]
   Why: The meta-project only becomes real when the system diagnoses its own failure modes from its own logs and artifacts.
   Done when: One diagnosis file identifies a concrete self-observation failure, cites evidence, and proposes a fix or follow-up task.
   Priority: medium
+  Completed: 2026-03-14. See `diagnosis/bootstrap-orient-overhead.md`.
 
 - [ ] Add one local example of a successful self-improvement loop [fleet-eligible] [skill: record] [zero-resource]
   Why: The strongest evidence for the meta-project is a full loop: detect a gap, change the system, then measure improvement.

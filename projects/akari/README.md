@@ -14,7 +14,11 @@ The artifacts here are adapted from the original private akari repo's operationa
 
 ## Log
 
-### 2026-03-14
+### 2026-03-14 (session 2)
+
+Task-selected: Write one self-observation diagnosis from operational evidence. Examined session metrics from run 345dloxm (the first automated session). Diagnosed "bootstrap orient overhead" — the orient procedure spent 42% of turns (18/43) in a near-empty repo, and the session produced 0 findings despite $1.44 cost. Root cause: orient doesn't scale down for bootstrap repos, and task selection favored meta-planning over direct observation. Proposed fix: skip inapplicable orient checks when <5 sessions exist. This is the first original diagnosis artifact (M1: 0 -> 1). See `diagnosis/bootstrap-orient-overhead.md`.
+
+### 2026-03-14 (session 1)
 
 Task-selected: Adapt self-improvement measurement plan. Created `plans/measurement-plan-openakari.md` with 5 concrete metrics (Gap Detection Rate, Closure Rate, Human Intervention Rate, System-Learning Rate, Knowledge Output Rate), each with explicit data sources, computation methods, and interpretation guides. Metrics are designed to work during bootstrap (absolute counts) and scale to automated computation via sessions.jsonl once the scheduler is active. Recorded baseline values at session 0.
 
