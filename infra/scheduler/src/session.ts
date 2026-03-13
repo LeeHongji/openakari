@@ -1,6 +1,6 @@
 /** In-memory registry of active agent sessions for supervision via Slack. */
 
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKMessage } from "./sdk.js";
 import type { SessionHandle } from "./backend.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -201,11 +201,11 @@ export function summarizeMessage(msg: SDKMessage): BufferedMessage | null {
   }
 
   if (msg.type === "tool_use_summary") {
-    return { timestamp: now, text: msg.summary, kind: "tool" };
+    return { timestamp: now, text: msg.summary ?? "", kind: "tool" };
   }
 
   if (msg.type === "result") {
-    const cost = msg.total_cost_usd;
+    const cost = msg.total_cost_usd ?? 0;
     const turns = msg.num_turns;
     const status = msg.is_error ? "error" : "success";
     const result = "result" in msg && msg.result ? msg.result : "";

@@ -95,7 +95,7 @@ The scheduler supports two agent backends, configurable per-job or globally:
 
 | Backend | How | Model default | Supervision | Cost tracking |
 |---------|-----|---------------|-------------|---------------|
-| `claude` | Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`) | per job config | full (watch/ask/stop) | yes |
+| `claude` | Claude Code CLI (`claude -p --output-format stream-json`) | per job config | full (watch/ask/stop) | yes |
 | `cursor` | Cursor Agent CLI (`agent -p --output-format stream-json`) | `opus-4.6-thinking` | partial (watch/stop only, no ask) | no |
 
 **Configuration:**

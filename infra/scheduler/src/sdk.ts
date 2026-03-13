@@ -1,28 +1,98 @@
-/** Thin wrapper around the Claude Agent SDK query() to share message-drain logic across callers. */
+/** Thin wrapper around `claude -p --output-format stream-json` to share message-drain logic across callers.
+ *  Replaces the previous @anthropic-ai/claude-agent-sdk dependency with direct CLI spawning. */
 
-import { query, type Options, type SDKMessage, type Query } from "@anthropic-ai/claude-agent-sdk";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createInterface } from "node:readline";
 
-export type { Query, SDKMessage };
+// ── Local types replacing SDK types ─────────────────────────────────────────
+
+/** Minimal message type compatible with Claude Code stream-json output. */
+export interface SDKMessage {
+  type: string;
+  subtype?: string;
+  session_id?: string;
+  message?: {
+    content?: Array<{
+      type: string;
+      text?: string;
+      name?: string;
+      input?: Record<string, unknown>;
+    }>;
+  };
+  result?: string;
+  is_error?: boolean;
+  total_cost_usd?: number;
+  num_turns?: number;
+  duration_ms?: number;
+  summary?: string;
+  modelUsage?: Record<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    costUSD: number;
+    contextWindow?: number;
+    maxOutputTokens?: number;
+  }>;
+  [key: string]: unknown;
+}
+
+/** Minimal user message type for streamInput. Permissive to allow extra fields. */
+export interface SDKUserMessage {
+  [key: string]: unknown;
+}
+
+/** Handle for a running CLI query — supports interrupt and optional stdin streaming. */
+export interface Query {
+  /** Async iterator over stream-json messages. */
+  [Symbol.asyncIterator](): AsyncIterator<SDKMessage>;
+  /** Gracefully interrupt the session. */
+  interrupt(): Promise<void>;
+  /** Inject user messages via stdin (requires --input-format stream-json). */
+  streamInput?(input: AsyncIterable<SDKUserMessage>): Promise<void>;
+}
+
+/** Agent definition for --agents JSON flag. */
+export interface AgentDefinition {
+  description: string;
+  prompt: string;
+  model?: string;
+  tools?: string[];
+  skills?: string[];
+  maxTurns?: number;
+}
+
+/** Hook types for team sessions (simplified local definitions). */
+export type HookEvent = "SubagentStart" | "SubagentStop" | "TaskCompleted" | "TeammateIdle";
+export interface HookJSONOutput { continue: boolean }
+export interface SubagentStartHookInput { agent_id: string; agent_type: string }
+export interface SubagentStopHookInput { agent_id: string; agent_type: string }
+export interface TaskCompletedHookInput { task_id: string; task_subject: string; teammate_name: string }
+export interface TeammateIdleHookInput { teammate_name: string }
+export type HookCallback = (input: unknown) => Promise<HookJSONOutput>;
+export interface HookCallbackMatcher { hooks: HookCallback[] }
+
+// ── Query options ───────────────────────────────────────────────────────────
 
 export interface QueryOpts {
   prompt: string;
   cwd: string;
   model?: string;
-  systemPrompt?: Options["systemPrompt"];
-  permissionMode?: Options["permissionMode"];
+  systemPrompt?: { type: string; preset?: string } | string;
+  permissionMode?: string;
   allowDangerouslySkipPermissions?: boolean;
-  tools?: Options["tools"];
+  tools?: { type: string; preset?: string };
   allowedTools?: string[];
   disallowedTools?: string[];
   maxTurns?: number;
   maxBudgetUsd?: number;
   resume?: string;
-  settingSources?: Options["settingSources"];
+  settingSources?: string[];
   /** Custom subagents available via the Task tool. */
-  agents?: Options["agents"];
-  /** SDK lifecycle hooks (team events, pre/post tool use, etc.). */
-  hooks?: Options["hooks"];
-  /** Extra environment variables to inject (e.g. experimental feature flags). */
+  agents?: Record<string, AgentDefinition>;
+  /** SDK lifecycle hooks (team events — currently not supported in CLI mode). */
+  hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
+  /** Extra environment variables to inject. */
   extraEnv?: Record<string, string>;
   onMessage?: (msg: SDKMessage) => void | Promise<void>;
 }
@@ -34,11 +104,16 @@ export interface QueryResult {
   costUsd?: number;
   numTurns?: number;
   durationMs: number;
-  /** Per-model token usage and cost breakdown (available when using subagents with different models). */
-  modelUsage?: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number; contextWindow?: number; maxOutputTokens?: number }>;
-  /** Per-tool invocation counts (e.g. { Read: 15, Bash: 5, Edit: 3 }). */
+  modelUsage?: Record<string, {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadInputTokens: number;
+    cacheCreationInputTokens: number;
+    costUSD: number;
+    contextWindow?: number;
+    maxOutputTokens?: number;
+  }>;
   toolCounts?: Record<string, number>;
-  /** Number of assistant turns consumed by the /orient skill (from Skill invocation to first execution-phase tool). Null if orient was not detected. */
   orientTurns?: number;
 }
 
@@ -46,6 +121,8 @@ export interface SupervisedQuery {
   query: Query;
   result: Promise<QueryResult>;
 }
+
+// ── Orient turn tracker ─────────────────────────────────────────────────────
 
 /** Tools that signal the execution phase has started (post-orient). */
 const EXECUTION_PHASE_TOOLS = new Set(["Edit", "Write", "TodoWrite"]);
@@ -90,8 +167,10 @@ export class OrientTurnTracker {
   }
 }
 
+// ── Environment helper ──────────────────────────────────────────────────────
+
 /** Strip CLAUDECODE env var to avoid nested-session guard when spawning from within Claude Code.
- *  Optionally merge extra env vars (e.g. CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS for team sessions). */
+ *  Optionally merge extra env vars. */
 function cleanEnv(extra?: Record<string, string>): Record<string, string | undefined> {
   const env = { ...process.env };
   delete env["CLAUDECODE"];
@@ -99,33 +178,142 @@ function cleanEnv(extra?: Record<string, string>): Record<string, string | undef
   return env;
 }
 
-/** Create a query and return the live handle alongside a promise for the eventual result.
- *  The drain loop runs as a detached async function. */
-export function runQuerySupervised(opts: QueryOpts): SupervisedQuery {
-  const start = Date.now();
+// ── CLI argument builder ────────────────────────────────────────────────────
 
-  const instance = query({
-    prompt: opts.prompt,
-    options: {
-      cwd: opts.cwd,
-      model: opts.model,
-      systemPrompt: opts.systemPrompt,
-      permissionMode: opts.permissionMode ?? "default",
-      allowDangerouslySkipPermissions: opts.allowDangerouslySkipPermissions,
-      tools: opts.tools,
-      allowedTools: opts.allowedTools,
-      disallowedTools: opts.disallowedTools,
-      maxTurns: opts.maxTurns,
-      maxBudgetUsd: opts.maxBudgetUsd,
-      resume: opts.resume,
-      settingSources: opts.settingSources,
-      agents: opts.agents,
-      hooks: opts.hooks,
-      env: cleanEnv(opts.extraEnv),
-    },
+function buildClaudeArgs(opts: QueryOpts): string[] {
+  const args: string[] = ["-p", "--output-format", "stream-json", "--verbose"];
+
+  if (opts.model) {
+    args.push("--model", opts.model);
+  }
+
+  if (opts.permissionMode === "bypassPermissions" || opts.allowDangerouslySkipPermissions) {
+    args.push("--dangerously-skip-permissions");
+  } else if (opts.permissionMode && opts.permissionMode !== "default") {
+    args.push("--permission-mode", opts.permissionMode);
+  }
+
+  if (opts.maxBudgetUsd !== undefined) {
+    args.push("--max-budget-usd", String(opts.maxBudgetUsd));
+  }
+
+  if (opts.resume) {
+    args.push("--resume", opts.resume);
+  }
+
+  if (opts.settingSources && opts.settingSources.length > 0) {
+    args.push("--setting-sources", opts.settingSources.join(","));
+  }
+
+  if (opts.allowedTools && opts.allowedTools.length > 0) {
+    args.push("--allowed-tools", ...opts.allowedTools);
+  }
+
+  if (opts.disallowedTools && opts.disallowedTools.length > 0) {
+    args.push("--disallowed-tools", ...opts.disallowedTools);
+  }
+
+  if (opts.agents && Object.keys(opts.agents).length > 0) {
+    args.push("--agents", JSON.stringify(opts.agents));
+  }
+
+  if (typeof opts.systemPrompt === "string") {
+    args.push("--system-prompt", opts.systemPrompt);
+  }
+
+  // Prompt is the positional argument
+  args.push(opts.prompt);
+
+  return args;
+}
+
+// ── Parse stream-json line ──────────────────────────────────────────────────
+
+function parseStreamJsonLine(line: string): SDKMessage | null {
+  try {
+    const msg = JSON.parse(line) as SDKMessage;
+    if (msg && typeof msg.type === "string") return msg;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ── Core spawning ───────────────────────────────────────────────────────────
+
+function spawnClaudeCli(
+  opts: QueryOpts,
+  onMessage?: (msg: SDKMessage) => void | Promise<void>,
+): { proc: ChildProcess; query: Query; result: Promise<QueryResult> } {
+  const start = Date.now();
+  const args = buildClaudeArgs(opts);
+  const cwd = opts.cwd;
+
+  const claudeBin = process.env.CLAUDE_BIN || "claude";
+  console.log(`[claude-cli] Spawning: ${claudeBin} ${args.slice(0, 6).join(" ")} ... (cwd=${cwd})`);
+
+  const proc = spawn(claudeBin, args, {
+    cwd,
+    stdio: ["pipe", "pipe", "pipe"],
+    env: cleanEnv(opts.extraEnv) as Record<string, string>,
   });
 
-  const result = (async (): Promise<QueryResult> => {
+  // Message queue for async iteration
+  const messageQueue: SDKMessage[] = [];
+  let messageResolve: ((value: IteratorResult<SDKMessage>) => void) | null = null;
+  let done = false;
+
+  function enqueueMessage(msg: SDKMessage) {
+    if (messageResolve) {
+      const resolve = messageResolve;
+      messageResolve = null;
+      resolve({ value: msg, done: false });
+    } else {
+      messageQueue.push(msg);
+    }
+  }
+
+  function finishIterator() {
+    done = true;
+    if (messageResolve) {
+      const resolve = messageResolve;
+      messageResolve = null;
+      resolve({ value: undefined as unknown as SDKMessage, done: true });
+    }
+  }
+
+  const query: Query = {
+    [Symbol.asyncIterator]() {
+      return {
+        next(): Promise<IteratorResult<SDKMessage>> {
+          if (messageQueue.length > 0) {
+            return Promise.resolve({ value: messageQueue.shift()!, done: false });
+          }
+          if (done) {
+            return Promise.resolve({ value: undefined as unknown as SDKMessage, done: true });
+          }
+          return new Promise((resolve) => {
+            messageResolve = resolve;
+          });
+        },
+      };
+    },
+    async interrupt() {
+      if (!proc.killed) {
+        proc.kill("SIGTERM");
+        setTimeout(() => { if (!proc.killed) proc.kill("SIGKILL"); }, 5000);
+      }
+    },
+    async streamInput(input: AsyncIterable<SDKUserMessage>) {
+      if (!proc.stdin || proc.stdin.destroyed) return;
+      for await (const msg of input) {
+        const line = JSON.stringify({ type: "user", message: msg }) + "\n";
+        proc.stdin.write(line);
+      }
+    },
+  };
+
+  const result = new Promise<QueryResult>((resolve, reject) => {
     let text = "";
     let sessionId: string | undefined;
     let costUsd: number | undefined;
@@ -133,43 +321,91 @@ export function runQuerySupervised(opts: QueryOpts): SupervisedQuery {
     let modelUsage: QueryResult["modelUsage"];
     const toolCounts: Record<string, number> = {};
     const orientTracker = new OrientTurnTracker();
+    let stderr = "";
 
-    for await (const msg of instance) {
-      await opts.onMessage?.(msg);
+    if (proc.stdout) {
+      const rl = createInterface({ input: proc.stdout });
+      rl.on("line", async (line) => {
+        const msg = parseStreamJsonLine(line);
+        if (!msg) return;
 
-      if (msg.type === "system" && "subtype" in msg && msg.subtype === "init") {
-        sessionId = msg.session_id;
-      }
+        // Enqueue for async iteration
+        enqueueMessage(msg);
 
-      if (msg.type === "assistant" && msg.message?.content) {
-        orientTracker.onNewTurn();
+        // Forward to onMessage callback
+        if (onMessage) {
+          try { await onMessage(msg); } catch { /* best-effort */ }
+        }
 
-        for (const block of msg.message.content) {
-          if (block.type === "text") text = block.text; // last text block wins
-          if (block.type === "tool_use" && "name" in block && typeof block.name === "string") {
-            toolCounts[block.name] = (toolCounts[block.name] ?? 0) + 1;
-            orientTracker.onTool(block.name, "input" in block ? block.input as Record<string, unknown> : undefined);
+        if (msg.type === "system" && msg.subtype === "init") {
+          sessionId = msg.session_id;
+        }
+
+        if (msg.type === "assistant" && msg.message?.content) {
+          orientTracker.onNewTurn();
+          for (const block of msg.message.content) {
+            if (block.type === "text" && block.text) text = block.text;
+            if (block.type === "tool_use" && block.name) {
+              toolCounts[block.name] = (toolCounts[block.name] ?? 0) + 1;
+              orientTracker.onTool(block.name, block.input);
+            }
           }
         }
-      }
 
-      if (msg.type === "result") {
-        if ("result" in msg && msg.result) text = msg.result;
-        costUsd = msg.total_cost_usd;
-        numTurns = msg.num_turns;
-        sessionId = msg.session_id;
-        // Extract per-model usage breakdown (useful for subagent cost attribution)
-        if ("modelUsage" in msg && msg.modelUsage) {
-          modelUsage = msg.modelUsage as QueryResult["modelUsage"];
+        if (msg.type === "result") {
+          if (msg.result) text = msg.result;
+          costUsd = msg.total_cost_usd;
+          numTurns = msg.num_turns;
+          if (msg.session_id) sessionId = msg.session_id;
+          if (msg.modelUsage) modelUsage = msg.modelUsage;
+          orientTracker.finalize();
         }
-        orientTracker.finalize();
-      }
+      });
     }
 
-    return { text, ok: true, sessionId, costUsd, numTurns, durationMs: Date.now() - start, modelUsage, toolCounts, orientTurns: orientTracker.orientTurns };
-  })();
+    if (proc.stderr) {
+      proc.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+    }
 
-  return { query: instance, result };
+    proc.on("error", (err) => {
+      finishIterator();
+      reject(new Error(`claude CLI failed to start: ${err.message}`));
+    });
+
+    proc.on("close", (code) => {
+      finishIterator();
+      const durationMs = Date.now() - start;
+      if (code !== 0 && !text) {
+        reject(new Error(
+          `claude CLI exited with code ${code}${stderr ? `: ${stderr.slice(0, 500)}` : ""}`,
+        ));
+        return;
+      }
+      resolve({
+        text,
+        ok: true,
+        sessionId,
+        costUsd,
+        numTurns,
+        durationMs,
+        modelUsage,
+        toolCounts,
+        orientTurns: orientTracker.orientTurns,
+      });
+    });
+  });
+
+  return { proc, query, result };
+}
+
+// ── Public API (same interface as before) ───────────────────────────────────
+
+/** Create a query and return the live handle alongside a promise for the eventual result. */
+export function runQuerySupervised(opts: QueryOpts): SupervisedQuery {
+  const { query: q, result } = spawnClaudeCli(opts, opts.onMessage);
+  return { query: q, result };
 }
 
 export async function runQuery(opts: QueryOpts): Promise<QueryResult> {

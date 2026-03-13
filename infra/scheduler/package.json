@@ -13,7 +13,6 @@
     "test:watch": "npx vitest"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.42",
     "better-sqlite3": "^12.6.2",
     "chart.js": "^4.5.1",
     "chartjs-node-canvas": "^5.0.0",

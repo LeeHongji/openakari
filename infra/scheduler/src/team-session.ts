@@ -10,7 +10,7 @@ import type {
   TaskCompletedHookInput,
   TeammateIdleHookInput,
   HookJSONOutput,
-} from "@anthropic-ai/claude-agent-sdk";
+} from "./sdk.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

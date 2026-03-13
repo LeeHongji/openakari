@@ -1,14 +1,14 @@
-/** Agent backend abstraction. Supports Claude Code SDK, Cursor Agent CLI, and opencode CLI with automatic fallback chain: Claude → Cursor → opencode. */
+/** Agent backend abstraction. Supports Claude Code CLI, Cursor Agent CLI, and opencode CLI with automatic fallback chain: Claude → Cursor → opencode. */
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   runQuery as claudeRunQuery,
   runQuerySupervised as claudeRunQuerySupervised,
   type QueryOpts,
   type QueryResult,
   type SDKMessage,
+  type SDKUserMessage,
 } from "./sdk.js";
 import { getBackendPreference } from "./backend-preference.js";
 import { getSessionCostFromDb } from "./opencode-db.js";
@@ -56,7 +56,7 @@ class ClaudeBackend implements AgentBackend {
     const handle: SessionHandle = {
       backend: "claude",
       interrupt: () => supervised.query.interrupt(),
-      streamInput: (input) => supervised.query.streamInput(input),
+      streamInput: supervised.query.streamInput ? (input) => supervised.query.streamInput!(input) : undefined,
     };
     return { handle, result: supervised.result };
   }

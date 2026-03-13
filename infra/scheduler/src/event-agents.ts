@@ -655,7 +655,7 @@ export async function spawnDeepWork(
 
   // Mutable ref for the session handle — populated after spawnAgent() returns.
   // The onExitPlanMode callback captures this ref to inject approval messages.
-  let handleRef: { streamInput?: (input: AsyncIterable<import("@anthropic-ai/claude-agent-sdk").SDKUserMessage>) => Promise<void>; sessionId?: string } | null = null;
+  let handleRef: { streamInput?: (input: AsyncIterable<import("./sdk.js").SDKUserMessage>) => Promise<void>; sessionId?: string } | null = null;
 
   const { handler, flusher } = buildProgressHandler({
     onProgress: callbacks.onProgress,
