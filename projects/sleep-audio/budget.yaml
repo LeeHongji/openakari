@@ -1,0 +1,18 @@
+# sleep-audio project budget
+# Phase 1 is zero-resource (literature survey only)
+# Budget will be revised when Phase 2 begins (model training/inference costs)
+
+project: sleep-audio
+period: 2026-03-14 / 2026-06-14  # 3-month initial period
+currency: USD
+
+limits:
+  api_calls: 50.00      # LLM API costs for literature search and analysis
+  compute: 0.00          # No compute costs in Phase 1
+  total: 50.00
+
+notes: |
+  Phase 1 (literature survey) is zero-resource — all tasks are analysis
+  and documentation using existing tools. Budget allocation for API calls
+  covers web search and LLM-assisted literature analysis.
+  Budget will be revised at Phase 2 kickoff when compute costs are known.
