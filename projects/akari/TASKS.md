@@ -13,6 +13,12 @@
   Done when: A short analysis computes intervention events per session over at least 2 time windows and records the result.
   Priority: medium
 
+- [x] Run bootstrap metrics snapshot (M1-M5 absolute counts) [fleet-eligible] [skill: analyze] [zero-resource]
+  Why: Mission gap — no task for "measuring whether autonomy and knowledge output improve over time" (per ADR 0049). The measurement plan specifies bootstrap-phase metrics as absolute counts. 3 sessions of data now exist.
+  Done when: Analysis file in `analysis/` records M1-M5 absolute counts with provenance (commands/data sources), and identifies at least one actionable observation.
+  Priority: high
+  Completed: 2026-03-14. See `analysis/bootstrap-metrics-snapshot-2026-03-14.md`. 3 findings: orient overhead unchanged by fast tier, knowledge accounting undercounts, self-improvement loop completed in 2 sessions.
+
 - [x] Write one self-observation diagnosis from operational evidence [requires-opus] [skill: diagnose] [zero-resource]
   Why: The meta-project only becomes real when the system diagnoses its own failure modes from its own logs and artifacts.
   Done when: One diagnosis file identifies a concrete self-observation failure, cites evidence, and proposes a fix or follow-up task.
