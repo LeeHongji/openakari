@@ -14,6 +14,10 @@ The artifacts here are adapted from the original private akari repo's operationa
 
 ## Log
 
+### 2026-03-14 (session 6)
+
+Task-selected: Diagnose knowledge accounting undercounting. Investigated why all 4 prior sessions report 0 findings in sessions.jsonl despite 8+ documented findings in analysis files. Traced root cause to `parseKnowledgeFromDiff()` in `infra/scheduler/src/verify.ts` (lines 1047-1111): two compounding bugs — (1) file filter only scans EXPERIMENT.md and README.md, ignoring analysis/*.md and diagnosis/*.md, (2) regex `/^\+\d+\.\s/` doesn't match the `### Finding N:` header format used in analysis files. True findings/$ rate is ~1.45 f/$ (8 findings / $5.55), not 0.0 as recorded. This is the second self-observation diagnosis (M1: 1 → 2), following the same pattern as bootstrap-orient-overhead: identify gap from operational data → trace to specific code → propose fix. Created implementation task for the fix. See `diagnosis/knowledge-accounting-undercounting.md`.
+
 ### 2026-03-14 (session 5)
 
 Task-selected: Measure human intervention rate in your deployment. Analyzed all 11 git commits and APPROVAL_QUEUE.md across 4 prior sessions. Classified each commit by author type (human/agent/scheduler) using timestamp correlation with sessions.jsonl. Computed M3 over two 2-session windows: Window A (sessions 1-2) = 0.5 interventions/session, Window B (sessions 3-4) = 0.0. Four findings: (1) both human interventions were infrastructure-only (repo setup, scheduler bugfix), zero research-direction interventions, (2) rate trajectory 0.5→0.0 matches expected bootstrap pattern, (3) cross-validation with M5 confirms low intervention reflects genuine autonomy not silent failure, (4) Co-Authored-By tag is unreliable for distinguishing human-initiated vs autonomous commits. Also generated mission gap task for second metrics snapshot at 8-10 sessions. See `analysis/human-intervention-rate-2026-03-14.md`.

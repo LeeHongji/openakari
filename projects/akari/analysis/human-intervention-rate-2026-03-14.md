@@ -117,6 +117,7 @@ M3 (Human Intervention Rate) at session 5:
 - **Character: infrastructure-only** — no research-direction interventions
 - **Cross-validation: meaningful** — M5 confirms non-zero knowledge output
 
+<!-- Recommendations surfaced: 2026-03-14 -->
 ## Next steps
 
 1. Re-measure at 8-10 sessions to confirm the 0.0 rate holds or identify new intervention types

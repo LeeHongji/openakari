@@ -43,3 +43,16 @@
   Done when: README log entry or analysis file records a before/after operational improvement with provenance.
   Priority: medium
   Completed: 2026-03-14. The bootstrap orient loop: diagnosed overhead (session 2) → implemented fix (session 3) → measurable via orient turns in future sessions. See README log.
+
+## Self-improvement loop 2: Knowledge accounting
+
+- [x] Diagnose knowledge accounting undercounting [requires-opus] [skill: diagnose] [zero-resource]
+  Why: All 4 sessions report 0 findings in sessions.jsonl knowledge counters, but analysis files contain 8+ documented findings. The primary KPI (findings/$) computes as 0.0 — self-measurement is broken.
+  Done when: Diagnosis file identifies root cause of the discrepancy, cites evidence (sessions.jsonl vs actual findings), and proposes a concrete fix.
+  Priority: high
+  Completed: 2026-03-14. See `diagnosis/knowledge-accounting-undercounting.md`. Root cause: `parseKnowledgeFromDiff()` in verify.ts only scans EXPERIMENT.md and README.md for findings; analysis files and diagnosis files are invisible. Two compounding bugs: file filter too narrow + regex doesn't match `### Finding N:` format.
+
+- [ ] Fix knowledge accounting to count findings in analysis and diagnosis files [requires-opus] [skill: execute] [zero-resource]
+  Why: Diagnosis identified that parseKnowledgeFromDiff() in verify.ts ignores analysis/*.md and diagnosis/*.md files. Primary KPI (findings/$) reads 0.0 when true rate is ~1.45 f/$.
+  Done when: verify.ts scans analysis and diagnosis files for `### Finding N:` headers, test cases added, and at least one subsequent session correctly records non-zero findings.
+  Priority: high
