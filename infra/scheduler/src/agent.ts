@@ -29,6 +29,8 @@ export const AGENT_PROFILES = {
   teamWorkSession: { model: "opus", maxTurns: 256, maxDurationMs: 7_200_000, label: "team-work-session" },
   // Read env var lazily (not at import time) so .env loading in cli.ts takes effect
   chat: { get model() { return process.env["SLACK_CHAT_MODEL"] ?? "sonnet"; }, maxTurns: 16, maxDurationMs: 120_000, label: "chat" },
+  /** Persistent chat session — long-lived interactive process, no maxTurns limit, 30min timeout. */
+  chatPersistent: { get model() { return process.env["SLACK_CHAT_MODEL"] ?? "sonnet"; }, maxDurationMs: 1_800_000, label: "chat-persistent" },
   autofix: { model: "opus", maxTurns: 32, maxDurationMs: 600_000, label: "autofix" },
   deepWork: { model: "opus", maxTurns: 256, maxDurationMs: 3_600_000, label: "deep-work" },
   skillCycle: { model: "sonnet", maxTurns: 48, maxDurationMs: 900_000, label: "skill-cycle" },
@@ -79,6 +81,8 @@ export interface SpawnAgentOpts {
   disallowedTools?: string[];
   /** Extra environment variables to inject (e.g. experimental feature flags for Agent Teams). */
   extraEnv?: Record<string, string>;
+  /** If true, spawn with stdin pipe for interactive multi-turn sessions. */
+  interactive?: boolean;
   onMessage?: (msg: Record<string, unknown>) => void | Promise<void>;
 }
 
@@ -184,6 +188,7 @@ export function spawnAgent(opts: SpawnAgentOpts): {
     agents: opts.agents,
     hooks: opts.hooks,
     extraEnv: opts.extraEnv,
+    interactive: opts.interactive,
     onMessage: async (msg) => {
       // Forward to caller's handler
       await opts.onMessage?.(msg as Record<string, unknown>);

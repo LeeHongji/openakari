@@ -95,6 +95,8 @@ export interface QueryOpts {
   /** Extra environment variables to inject. */
   extraEnv?: Record<string, string>;
   onMessage?: (msg: SDKMessage) => void | Promise<void>;
+  /** If true, spawn with stdin pipe + --input-format stream-json for interactive multi-turn sessions. */
+  interactive?: boolean;
 }
 
 export interface QueryResult {
@@ -183,6 +185,10 @@ function cleanEnv(extra?: Record<string, string>): Record<string, string | undef
 function buildClaudeArgs(opts: QueryOpts): string[] {
   const args: string[] = ["-p", "--output-format", "stream-json", "--verbose"];
 
+  if (opts.interactive) {
+    args.push("--input-format", "stream-json");
+  }
+
   if (opts.model) {
     args.push("--model", opts.model);
   }
@@ -252,9 +258,11 @@ function spawnClaudeCli(
   const claudeBin = process.env.CLAUDE_BIN || "claude";
   console.log(`[claude-cli] Spawning: ${claudeBin} ${args.slice(0, 6).join(" ")} ... (cwd=${cwd})`);
 
+  const interactive = opts.interactive ?? false;
+
   const proc = spawn(claudeBin, args, {
     cwd,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: [interactive ? "pipe" : "ignore", "pipe", "pipe"],
     env: cleanEnv(opts.extraEnv) as Record<string, string>,
   });
 
@@ -304,8 +312,14 @@ function spawnClaudeCli(
         setTimeout(() => { if (!proc.killed) proc.kill("SIGKILL"); }, 5000);
       }
     },
-    // streamInput not available when stdin is "ignore" — would need to respawn with stdin: "pipe"
-    // If interactive input is needed, use the supervised backend with stdin enabled.
+    ...(interactive && proc.stdin ? {
+      async streamInput(input: AsyncIterable<SDKUserMessage>) {
+        for await (const msg of input) {
+          const line = JSON.stringify(msg) + "\n";
+          proc.stdin!.write(line);
+        }
+      },
+    } : {}),
   };
 
   const result = new Promise<QueryResult>((resolve, reject) => {

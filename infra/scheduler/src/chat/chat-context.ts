@@ -13,6 +13,103 @@ import { EXCLUDED_PROJECTS } from "../constants.js";
 import type { JobStore } from "../store.js";
 import { listSessions } from "../session.js";
 
+// ── Project detection & context loading ──────────────────────────────────────
+
+/** Detect which projects are relevant from the user's message and conversation history.
+ *  Returns project names that appear in the message or recent history. */
+export function detectRelevantProjects(
+  message: string,
+  history: Array<{ role: string; content: string }>,
+  projectNames: string[],
+): string[] {
+  const combined = [message, ...history.slice(-6).map((m) => m.content)].join(" ").toLowerCase();
+  return projectNames.filter((name) => combined.includes(name.toLowerCase()));
+}
+
+/** Load full project context for a specific project (README + TASKS + recent experiment summaries).
+ *  Returns a formatted context string suitable for injection into a deep work prompt. */
+export async function loadProjectContext(
+  repoDir: string,
+  projectName: string,
+): Promise<string> {
+  const projectDir = join(repoDir, "projects", projectName);
+  const parts: string[] = [`## Project context: ${projectName}\n`];
+
+  // README (truncated to 6000 chars)
+  try {
+    let readme = await readFile(join(projectDir, "README.md"), "utf-8");
+    if (readme.length > 6000) {
+      readme = readme.slice(0, 6000) + "\n...(truncated)";
+    }
+    parts.push(`### README.md\n${readme}\n`);
+  } catch {
+    // no README
+  }
+
+  // TASKS.md (full)
+  try {
+    const tasks = await readFile(join(projectDir, "TASKS.md"), "utf-8");
+    parts.push(`### TASKS.md\n${tasks}\n`);
+  } catch {
+    // no TASKS
+  }
+
+  // Recent experiment summaries (last 3 by mtime)
+  try {
+    const expDir = join(projectDir, "experiments");
+    const entries = await readdir(expDir);
+    const expInfos: Array<{ name: string; mtimeMs: number }> = [];
+    for (const entry of entries) {
+      try {
+        const s = await stat(join(expDir, entry));
+        if (s.isDirectory()) {
+          expInfos.push({ name: entry, mtimeMs: s.mtimeMs });
+        }
+      } catch { /* skip */ }
+    }
+    expInfos.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    const recent = expInfos.slice(0, 3);
+
+    if (recent.length > 0) {
+      parts.push(`### Recent experiments`);
+      for (const exp of recent) {
+        try {
+          let expMd = await readFile(join(expDir, exp.name, "EXPERIMENT.md"), "utf-8");
+          // Only include first 500 chars as summary
+          if (expMd.length > 500) {
+            expMd = expMd.slice(0, 500) + "\n...(truncated)";
+          }
+          parts.push(`#### ${exp.name}\n${expMd}\n`);
+        } catch {
+          parts.push(`#### ${exp.name} (no EXPERIMENT.md)\n`);
+        }
+      }
+    }
+  } catch {
+    // no experiments dir
+  }
+
+  return parts.join("\n");
+}
+
+/** List all project directory names under repoDir/projects/. */
+export async function listProjectNames(repoDir: string): Promise<string[]> {
+  const projectsDir = join(repoDir, "projects");
+  try {
+    const entries = await readdir(projectsDir);
+    const names: string[] = [];
+    for (const entry of entries) {
+      try {
+        const s = await stat(join(projectsDir, entry));
+        if (s.isDirectory()) names.push(entry);
+      } catch { /* skip */ }
+    }
+    return names;
+  } catch {
+    return [];
+  }
+}
+
 /** Gather contextual information for the chat agent's system prompt.
  *  Includes system status, jobs, sessions, approvals, budgets, and project summaries.
  *  On-demand sections are added when the user message references specific content. */

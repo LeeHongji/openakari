@@ -4,7 +4,7 @@
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface PendingAction {
-  kind: "approve" | "deny" | "launch_experiment" | "run_job" | "run_burst" | "fleet_control";
+  kind: "approve" | "deny" | "launch_experiment" | "run_job" | "run_burst" | "fleet_control" | "approve_evolution" | "reject_evolution";
   itemIndex?: number;   // for approve/deny
   notes?: string;       // for approve/deny
   project?: string;     // for launch_experiment
@@ -30,7 +30,7 @@ const APPROVAL_ACTION_RE = /\[ACTION:(approve|deny)\s+item=(\d+)(?:\s+notes="([^
 const SESSION_ACTION_RE = /\[ACTION:(stop_session|ask_session|watch_session)\s+id="([^"]+)"(?:\s+message="([^"]*)")?\]/;
 const EXPERIMENT_ACTION_RE = /\[ACTION:(launch_experiment|stop_experiment)\s+project="([^"]+)"\s+id="([^"]+)"(?:\s+command="([^"]*)")?\]/;
 const RUN_JOB_ACTION_RE = /\[ACTION:run_job\s+id="([^"]+)"\]/;
-const DEEP_WORK_ACTION_RE = /\[ACTION:deep_work\s+task="([^"]+)"\]/;
+const DEEP_WORK_ACTION_RE = /\[ACTION:deep_work\s+task="([^"]+)"(?:\s+project="([^"]*)")?\]/;
 const GENERATE_REPORT_ACTION_RE = /\[ACTION:generate_report\s+type="([^"]+)"(?:\s+project="([^"]*)")?(?:\s+from="([^"]*)")?(?:\s+to="([^"]*)")?\]/;
 const SEND_FILES_ACTION_RE = /\[ACTION:send_files\s+paths="([^"]+)"(?:\s+caption="([^"]*)")?\]/;
 const SEND_IMAGES_ACTION_RE = /\[ACTION:send_images\s+paths="([^"]+)"(?:\s+caption="([^"]*)")?\]/;
@@ -40,6 +40,9 @@ const NOTE_QUESTION_ACTION_RE = /\[ACTION:note_question\s+project="([^"]+)"\s+qu
 const AWAIT_RESPONSE_ACTION_RE = /\[ACTION:await_response\s+context="([^"]*)"\]/;
 const CREATE_TASK_ACTION_RE = /\[ACTION:create_task\s+project="([^"]+)"\s+task="([^"]+)"\s+done_when="([^"]+)"\]/;
 const FLEET_CONTROL_ACTION_RE = /\[ACTION:fleet_control\s+op="(enable|disable|status|resize)"(?:\s+size=(\d+))?\]/;
+const START_EVOLUTION_ACTION_RE = /\[ACTION:start_evolution\s+task="([^"]+)"\s+description="([^"]+)"\]/;
+const APPROVE_EVOLUTION_ACTION_RE = /\[ACTION:approve_evolution\]/;
+const REJECT_EVOLUTION_ACTION_RE = /\[ACTION:reject_evolution\]/;
 const RESTART_ACTION_RE = /\[ACTION:restart\]/;
 
 // ── Tag stripping ────────────────────────────────────────────────────────────
@@ -97,7 +100,7 @@ export function findActionTag(text: string): ParsedAction | null {
     return {
       tag: match[0],
       kind: "deep_work",
-      params: { task: match[1] },
+      params: { task: match[1], project: match[2] ?? "" },
     };
   }
 
@@ -184,6 +187,33 @@ export function findActionTag(text: string): ParsedAction | null {
       tag: match[0],
       kind: "fleet_control",
       params: { op: match[1], size: match[2] ?? "" },
+    };
+  }
+
+  match = text.match(START_EVOLUTION_ACTION_RE);
+  if (match) {
+    return {
+      tag: match[0],
+      kind: "start_evolution",
+      params: { task: match[1], description: match[2] },
+    };
+  }
+
+  match = text.match(APPROVE_EVOLUTION_ACTION_RE);
+  if (match) {
+    return {
+      tag: match[0],
+      kind: "approve_evolution",
+      params: {},
+    };
+  }
+
+  match = text.match(REJECT_EVOLUTION_ACTION_RE);
+  if (match) {
+    return {
+      tag: match[0],
+      kind: "reject_evolution",
+      params: {},
     };
   }
 
@@ -290,6 +320,10 @@ export function buildConfirmPrompt(action: PendingAction): string {
       return `:point_right: _Confirm: reply *yes* to approve, or *no* to cancel._`;
     case "deny":
       return `:point_right: _Confirm: reply *yes* to deny, or *no* to cancel._`;
+    case "approve_evolution":
+      return `:point_right: _Reply *approve* to merge the evolution into main, or *reject* to discard it._`;
+    case "reject_evolution":
+      return `:point_right: _Reply *yes* to reject and discard the evolution, or *no* to keep it for review._`;
     default:
       return `:point_right: _Reply *yes* to confirm, or *no* to cancel._`;
   }

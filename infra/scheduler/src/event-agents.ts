@@ -489,12 +489,15 @@ const MAX_THREAD_CONTEXT_CHARS = 12_000;
  *    same thread. Enables context inheritance across multiple deep work sessions.
  *  @param skillContent If provided, embeds the skill instructions directly in the
  *    prompt instead of requiring the Skill tool. This ensures skills work on all
- *    backends (including opencode/GLM-5-FP8 which may not support the Skill tool). */
+ *    backends (including opencode/GLM-5-FP8 which may not support the Skill tool).
+ *  @param projectContext If provided, injects project-specific context (README, TASKS,
+ *    experiment summaries) so the deep work agent starts with full project awareness. */
 export function buildDeepWorkPrompt(
   task: string,
   skillList: string,
   threadContext?: string,
   skillContent?: string | null,
+  projectContext?: string | null,
 ): string {
   const skillMatch = task.match(/^Run\s+\/(\S+)/i);
   const skillName = skillMatch?.[1];
@@ -556,6 +559,16 @@ export function buildDeepWorkPrompt(
     `## Committing work`,
     `Before finishing, commit any new or modified files (research artifacts, diagnosis files, literature notes, experiment designs, skill updates) with a descriptive message. Committing research artifacts is routine and expected — it preserves knowledge produced during the session. Do NOT push to remote; pushing is handled at the session lifecycle level.`,
   );
+
+  if (projectContext && projectContext.trim().length > 0) {
+    parts.push(
+      ``,
+      `## Target project context`,
+      `The following project context was auto-loaded based on the task. Use it to understand the project structure, current tasks, and recent experiments without needing to discover them yourself.`,
+      ``,
+      projectContext,
+    );
+  }
 
   if (threadContext && threadContext.trim().length > 0) {
     let ctx = threadContext.trim();
@@ -630,6 +643,8 @@ const PERSIST_BASE_DIR = new URL("../../../.scheduler", import.meta.url).pathnam
 /** Spawn an opus agent session for tasks that exceed chat scope.
  *  Progress is forwarded to the caller; completion posts a summary.
  *  @param threadContext Optional Slack thread history for context inheritance.
+ *  @param project Optional project name — if provided, auto-loads project context
+ *    (README, TASKS, experiment summaries) into the deep work prompt.
  *  Returns the sessionId. */
 export async function spawnDeepWork(
   task: string,
@@ -637,6 +652,7 @@ export async function spawnDeepWork(
   callbacks: DeepWorkCallbacks,
   threadKey: string,
   threadContext?: string,
+  project?: string,
 ): Promise<string> {
   // Dynamic skill enumeration — no more hardcoded list
   const skills = await listSkills(repoDir);
@@ -651,7 +667,19 @@ export async function spawnDeepWork(
     ? await readSkillContent(repoDir, skillName)
     : null;
 
-  const prompt = buildDeepWorkPrompt(task, skillList, threadContext, skillContent);
+  // Load project-specific context if a project was identified
+  let projectContext: string | null = null;
+  if (project) {
+    try {
+      const { loadProjectContext } = await import("./chat/chat-context.js");
+      projectContext = await loadProjectContext(repoDir, project);
+      console.log(`[deep-work] Loaded project context for "${project}" (${projectContext.length} chars)`);
+    } catch (err) {
+      console.error(`[deep-work] Failed to load project context for "${project}": ${err}`);
+    }
+  }
+
+  const prompt = buildDeepWorkPrompt(task, skillList, threadContext, skillContent, projectContext);
 
   // Mutable ref for the session handle — populated after spawnAgent() returns.
   // The onExitPlanMode callback captures this ref to inject approval messages.
@@ -754,5 +782,79 @@ export async function spawnDeepWork(
   });
 
   console.log(`[deep-work] Session spawned: ${sessionId}`);
+  return sessionId;
+}
+
+// ── Evolution work (worktree-isolated self-modification) ─────────────────────
+
+interface EvolutionCallbacks {
+  onProgress: (text: string) => Promise<void>;
+  onComplete: (text: string) => Promise<void>;
+}
+
+/** Build the prompt for an evolution agent working in an isolated worktree. */
+function buildEvolutionPrompt(task: string, worktreeDir: string): string {
+  return [
+    `You are Akari's evolution agent. You are working in an ISOLATED GIT WORKTREE — changes here do NOT affect the running scheduler.`,
+    ``,
+    `Your working directory is: ${worktreeDir}`,
+    `This is a separate copy of the repo on a feature branch. You may freely modify files.`,
+    ``,
+    `## Task`,
+    task,
+    ``,
+    `## Rules`,
+    `1. Make your changes in infra/scheduler/src/ (or .claude/skills/, projects/, docs/ as needed).`,
+    `2. After making changes, run \`npx tsc --noEmit\` and \`npx vitest run\` in infra/scheduler/ to verify.`,
+    `3. Commit your changes with a descriptive message.`,
+    `4. Do NOT push to remote — the merge happens after human review.`,
+    `5. Be surgical — make the minimum changes needed for the task.`,
+    ``,
+    `When done, write a concise summary of what you changed and why.`,
+  ].join("\n");
+}
+
+/** Spawn an opus agent in an isolated worktree for evolution work.
+ *  The agent has full write permissions within the worktree.
+ *  Returns the session ID. */
+export async function spawnEvolutionWork(
+  task: string,
+  worktreeDir: string,
+  repoDir: string,
+  callbacks: EvolutionCallbacks,
+  threadKey: string,
+): Promise<string> {
+  const prompt = buildEvolutionPrompt(task, worktreeDir);
+
+  const { handler, flusher } = buildProgressHandler({
+    onProgress: callbacks.onProgress,
+    label: "evolution",
+    securityCheck: true,
+    onSecurityBlock: async (_cmd, reason) => {
+      await callbacks.onProgress(`:lock: *Command blocked:* ${reason}`);
+    },
+  });
+
+  const backend = resolveBackend();
+  const profile = resolveProfileForBackend(AGENT_PROFILES.deepWork, backend.name);
+
+  const { sessionId, result } = spawnAgent({
+    profile,
+    prompt,
+    cwd: worktreeDir,
+    onMessage: handler,
+  });
+
+  result.then(async (r) => {
+    await flusher.flush();
+    const summary = r.text.length > 1500 ? r.text.slice(-1500) : r.text;
+    await callbacks.onComplete(
+      `:white_check_mark: *Evolution work complete* (${Math.round(r.durationMs / 1000)}s, ${r.numTurns} turns, $${r.costUsd.toFixed(2)})\n${summary}`,
+    );
+  }).catch(async (err) => {
+    await callbacks.onComplete(`:x: Evolution work failed: ${err instanceof Error ? err.message : String(err)}`);
+  });
+
+  console.log(`[evolution] Session spawned in worktree: ${sessionId}`);
   return sessionId;
 }
