@@ -88,12 +88,8 @@ interface ConversationState {
     interviewPrompt: string;
   } | null;
   // ── Persistent session fields ──
-  /** Handle for a persistent interactive claude process (stdin pipe). */
-  persistentHandle: SessionHandle | null;
-  /** Session ID of the persistent interactive session. */
-  persistentSessionId: string | null;
-  /** Timer that terminates the persistent session after idle timeout. */
-  idleTimer: ReturnType<typeof setTimeout> | null;
+  /** Claude session ID from a completed chat session — used to --resume for multi-turn. */
+  resumeSessionId: string | null;
 }
 
 /** Callbacks the caller provides so the async agent can post to the Slack thread.
@@ -159,9 +155,7 @@ function getConversation(channelId: string): ConversationState {
     lastTimedOutMessage: null,
     pendingQuestion: null,
     activeInterview: null,
-    persistentHandle: null,
-    persistentSessionId: null,
-    idleTimer: null,
+    resumeSessionId: null,
   };
   conversations.set(channelId, fresh);
   return fresh;
@@ -185,74 +179,9 @@ function addMessage(conv: ConversationState, role: "user" | "assistant", content
   }
 }
 
-/** Clear conversation history for a channel. Also terminates persistent session if active. */
+/** Clear conversation history for a channel. */
 export function clearConversation(channelId: string): void {
-  const conv = conversations.get(channelId);
-  if (conv) {
-    terminatePersistentSession(conv, "clear");
-  }
   conversations.delete(channelId);
-}
-
-// ── Persistent session helpers ──────────────────────────────────────────────
-
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
-
-/** Reset the idle timer for a persistent session. */
-function resetIdleTimer(conv: ConversationState): void {
-  if (conv.idleTimer) clearTimeout(conv.idleTimer);
-  conv.idleTimer = setTimeout(() => {
-    console.log(`[chat] Persistent session idle timeout (${IDLE_TIMEOUT_MS / 60_000}min), terminating`);
-    terminatePersistentSession(conv, "idle-timeout");
-  }, IDLE_TIMEOUT_MS);
-}
-
-/** Terminate a persistent session and clean up state. */
-function terminatePersistentSession(conv: ConversationState, reason: string): void {
-  if (conv.persistentHandle) {
-    console.log(`[chat] Terminating persistent session ${conv.persistentSessionId} (${reason})`);
-    conv.persistentHandle.interrupt().catch(() => {});
-    conv.persistentHandle = null;
-    conv.persistentSessionId = null;
-  }
-  if (conv.idleTimer) {
-    clearTimeout(conv.idleTimer);
-    conv.idleTimer = null;
-  }
-}
-
-/** Check if a persistent session is alive and has streamInput capability. */
-function hasPersistentSession(conv: ConversationState): boolean {
-  return conv.persistentHandle !== null && conv.persistentHandle.streamInput !== undefined;
-}
-
-/** Send a message to an existing persistent session via streamInput. */
-async function sendToPersistentSession(
-  conv: ConversationState,
-  message: string,
-): Promise<boolean> {
-  if (!conv.persistentHandle?.streamInput || !conv.persistentSessionId) {
-    return false;
-  }
-
-  try {
-    await conv.persistentHandle.streamInput(
-      (async function* () {
-        yield {
-          type: "user" as const,
-          message: { role: "user" as const, content: message },
-          parent_tool_use_id: null,
-          session_id: conv.persistentSessionId ?? "",
-        };
-      })(),
-    );
-    resetIdleTimer(conv);
-    return true;
-  } catch (err) {
-    console.error(`[chat] Failed to send to persistent session: ${err}`);
-    terminatePersistentSession(conv, "streamInput-error");
-    return false;
-  }
 }
 
 /** Test-only: get or create conversation state for a channel. */
@@ -516,10 +445,15 @@ function spawnChatAsync(
   let handle: SessionHandle;
   let result: Promise<AgentResult>;
   try {
+    const resumeId = conv.resumeSessionId ?? undefined;
+    if (resumeId) {
+      console.log(`[chat] Resuming claude session ${resumeId} for multi-turn`);
+    }
     ({ sessionId, handle, result } = spawnAgent({
       profile: AGENT_PROFILES.chat,
       prompt,
       cwd: repoDir,
+      resume: resumeId,
       disallowedTools: channelMode === "chat" ? ["Edit", "Write", "NotebookEdit", "Bash"] : undefined,
       onMessage: chatModeInterceptor ?? buildChatMessageHandler(callbacks, handleRef, progressState, repoDir, convKey, conv, threadContext),
     }));
@@ -547,6 +481,12 @@ function spawnChatAsync(
       return;
     }
     conv.activeSessionId = null;
+
+    // Capture claude session ID for --resume on next message in this thread
+    if (agentResult.claudeSessionId) {
+      conv.resumeSessionId = agentResult.claudeSessionId;
+      console.log(`[chat] Captured claude session ${agentResult.claudeSessionId} for resume`);
+    }
 
     // Track timeout state for auto-escalation on "continue"
     if (agentResult.timedOut) {
@@ -617,97 +557,6 @@ function spawnChatAsync(
     }
   });
 
-  return sessionId;
-}
-
-/** Spawn a persistent interactive chat session for a thread.
- *  The claude process stays alive, subsequent messages are injected via stdin.
- *  Returns the session ID, or null if interactive mode is unavailable (fallback to fire-and-forget). */
-function spawnPersistentChat(
-  prompt: string,
-  repoDir: string,
-  conv: ConversationState,
-  convKey: string,
-  callbacks: ChatCallbacks,
-  threadContext?: string,
-  channelMode: ChannelMode = "dev",
-): string | null {
-  // Terminate any existing persistent session before creating a new one
-  terminatePersistentSession(conv, "new-session");
-
-  conv.generation++;
-  const handleRef: { handle: SessionHandle | null } = { handle: null };
-  const progressState = { lastProgressText: "", skillIntercepted: false, allText: "" };
-
-  let sessionId: string;
-  let handle: SessionHandle;
-  let result: Promise<AgentResult>;
-  try {
-    ({ sessionId, handle, result } = spawnAgent({
-      profile: AGENT_PROFILES.chatPersistent,
-      prompt,
-      cwd: repoDir,
-      interactive: true,
-      disallowedTools: channelMode === "chat" ? ["Edit", "Write", "NotebookEdit", "Bash"] : undefined,
-      onMessage: buildChatMessageHandler(callbacks, handleRef, progressState, repoDir, convKey, conv, threadContext),
-    }));
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[chat] Failed to spawn persistent session for ${convKey}: ${msg}`);
-    // Fallback: will use non-persistent mode
-    return null;
-  }
-
-  handleRef.handle = handle;
-
-  // Check if this backend supports streamInput (only claude backend does)
-  if (!handle.streamInput) {
-    console.log(`[chat] Backend doesn't support streamInput, falling back to fire-and-forget`);
-    // Let it run as a normal one-shot session
-    conv.activeSessionId = sessionId;
-    result.then(async (r) => {
-      conv.activeSessionId = null;
-      const text = r.text || "Done.";
-      addMessage(conv, "assistant", text);
-      await callbacks.onComplete(text);
-    }).catch(async (err) => {
-      conv.activeSessionId = null;
-      await callbacks.onComplete(`:x: Error: ${err instanceof Error ? err.message : String(err)}`);
-    });
-    return sessionId;
-  }
-
-  // Store persistent handle
-  conv.persistentHandle = handle;
-  conv.persistentSessionId = sessionId;
-  conv.activeSessionId = sessionId;
-  resetIdleTimer(conv);
-
-  // Handle process exit: clean up persistent state
-  result.then(async (r) => {
-    console.log(`[chat] Persistent session ${sessionId} ended: ${r.numTurns} turns, $${r.costUsd.toFixed(4)}`);
-    conv.persistentHandle = null;
-    conv.persistentSessionId = null;
-    conv.activeSessionId = null;
-    if (conv.idleTimer) { clearTimeout(conv.idleTimer); conv.idleTimer = null; }
-
-    const text = r.text || "";
-    if (text && !progressState.skillIntercepted) {
-      const rawResponse = stripActionTags(text);
-      if (rawResponse) {
-        addMessage(conv, "assistant", rawResponse);
-        await callbacks.onComplete(rawResponse);
-      }
-    }
-  }).catch(async (err) => {
-    console.error(`[chat] Persistent session ${sessionId} error:`, err);
-    conv.persistentHandle = null;
-    conv.persistentSessionId = null;
-    conv.activeSessionId = null;
-    if (conv.idleTimer) { clearTimeout(conv.idleTimer); conv.idleTimer = null; }
-  });
-
-  console.log(`[chat] Persistent session spawned: ${sessionId} for ${convKey}`);
   return sessionId;
 }
 
@@ -2029,29 +1878,6 @@ async function processMessageInner(
     }
   }
 
-  // ── Persistent session: "exit" terminates, other messages inject via streamInput ──
-  if (hasPersistentSession(conv)) {
-    const lower = message.toLowerCase().trim();
-    if (lower === "exit" || lower === "quit" || lower === "bye") {
-      addMessage(conv, "user", message);
-      terminatePersistentSession(conv, "user-exit");
-      const ack = `:wave: 会话已结束。下次在新 thread 中开始新对话吧！`;
-      addMessage(conv, "assistant", ack);
-      return { text: ack };
-    }
-
-    // Inject message into persistent session
-    addMessage(conv, "user", message);
-    const sent = await sendToPersistentSession(conv, message);
-    if (sent) {
-      console.log(`[chat] Message injected into persistent session ${conv.persistentSessionId}`);
-      // Response will arrive via the onMessage handler already set up
-      return null;
-    }
-    // If send failed, persistent session is dead — fall through to normal flow
-    console.log(`[chat] Persistent session dead, falling through to normal flow`);
-  }
-
   // Gather context and enumerate skills
   const [context, skills] = await Promise.all([
     gatherChatContext(repoDir, store, message),
@@ -2263,13 +2089,6 @@ Continue the work from where it left off. Use the thread context to understand w
   const prompt = mode === "chat"
     ? buildChatModePrompt(context, historyForPrompt, message, opts?.senderName, opts?.threadMessages, opts?.team)
     : buildChatPrompt(context, historyForPrompt, message, opts?.threadMessages, skills, opts?.senderName, opts?.team, interviewContext);
-
-  // Try persistent (interactive) session first for dev mode — enables multi-turn within the thread.
-  // Falls back to fire-and-forget if the backend doesn't support streamInput.
-  if (mode === "dev") {
-    const persistentId = spawnPersistentChat(prompt, repoDir, conv, channelId, callbacks, opts?.threadMessages, mode);
-    if (persistentId) return { sessionId: persistentId };
-  }
 
   // Fire-and-forget: spawn agent async, return sessionId
   const sessionId = spawnChatAsync(prompt, repoDir, conv, channelId, callbacks, opts?.threadMessages, mode, opts?.fleetScheduler);

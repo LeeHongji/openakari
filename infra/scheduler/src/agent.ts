@@ -83,6 +83,8 @@ export interface SpawnAgentOpts {
   extraEnv?: Record<string, string>;
   /** If true, spawn with stdin pipe for interactive multi-turn sessions. */
   interactive?: boolean;
+  /** Claude session ID to resume (--resume flag). Enables multi-turn within same conversation. */
+  resume?: string;
   onMessage?: (msg: Record<string, unknown>) => void | Promise<void>;
 }
 
@@ -92,6 +94,8 @@ export interface AgentResult {
   numTurns: number;
   durationMs: number;
   timedOut: boolean;
+  /** Claude CLI session ID — use with --resume for multi-turn. */
+  claudeSessionId?: string;
   /** Per-model token usage and cost breakdown from the SDK. */
   modelUsage?: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number; contextWindow?: number; maxOutputTokens?: number }>;
   /** Per-tool invocation counts (e.g. { Read: 15, Bash: 5, Edit: 3 }). */
@@ -189,6 +193,7 @@ export function spawnAgent(opts: SpawnAgentOpts): {
     hooks: opts.hooks,
     extraEnv: opts.extraEnv,
     interactive: opts.interactive,
+    resume: opts.resume,
     onMessage: async (msg) => {
       // Forward to caller's handler
       await opts.onMessage?.(msg as Record<string, unknown>);
@@ -290,6 +295,7 @@ export function spawnAgent(opts: SpawnAgentOpts): {
         numTurns: r.numTurns ?? 0,
         durationMs: r.durationMs,
         timedOut,
+        claudeSessionId: r.sessionId,
         modelUsage: r.modelUsage,
         toolCounts: r.toolCounts,
         orientTurns: r.orientTurns,

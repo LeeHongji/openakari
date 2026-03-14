@@ -187,6 +187,8 @@ function buildClaudeArgs(opts: QueryOpts): string[] {
 
   if (opts.interactive) {
     args.push("--input-format", "stream-json");
+    // In interactive mode, do NOT pass --output-format twice, but we need it.
+    // The initial prompt will be sent via stdin after spawn, not as positional arg.
   }
 
   if (opts.model) {
@@ -227,8 +229,11 @@ function buildClaudeArgs(opts: QueryOpts): string[] {
     args.push("--system-prompt", opts.systemPrompt);
   }
 
-  // Prompt is the positional argument
-  args.push(opts.prompt);
+  // In interactive mode, the initial prompt is sent via stdin — not as positional arg.
+  // Otherwise claude -p treats it as a one-shot query and ignores stdin.
+  if (!opts.interactive) {
+    args.push(opts.prompt);
+  }
 
   return args;
 }
@@ -265,6 +270,18 @@ function spawnClaudeCli(
     stdio: [interactive ? "pipe" : "ignore", "pipe", "pipe"],
     env: cleanEnv(opts.extraEnv) as Record<string, string>,
   });
+
+  // In interactive mode, send the initial prompt via stdin as a stream-json user message
+  if (interactive && proc.stdin) {
+    const initMsg = JSON.stringify({
+      type: "user",
+      message: { role: "user", content: opts.prompt },
+      parent_tool_use_id: null,
+      session_id: "",
+    }) + "\n";
+    proc.stdin.write(initMsg);
+    console.log(`[claude-cli] Sent initial prompt via stdin (${opts.prompt.length} chars)`);
+  }
 
   // Message queue for async iteration
   const messageQueue: SDKMessage[] = [];
