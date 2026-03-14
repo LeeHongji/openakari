@@ -2,10 +2,11 @@
 
 ## Phase 1: Literature survey
 
-- [ ] Survey DL models for sleep stage classification [requires-opus] [skill: analyze] [zero-resource]
+- [x] Survey DL models for sleep stage classification [requires-opus] [skill: analyze] [zero-resource]
   Why: Need to understand the landscape of deep learning approaches (CNN, RNN, Transformer, hybrid) used for sleep stage prediction/classification across all modalities, then focus on audio-applicable architectures.
   Done when: Literature note covering ≥10 papers on DL-based sleep staging, organized by model family, with accuracy benchmarks and modality requirements documented.
   Priority: high
+  Completed: 2026-03-14. See `knowledge/dl-sleep-staging-survey.md`. 17 papers across 5 architecture families (CNN, CNN+RNN hybrid, Attention/Transformer, Lightweight/Edge, Non-EEG). 6 findings including architecture convergence on CNN+Attention, viable model compression to 0.049M params, and non-EEG accuracy ceiling at ~77%.
 
 - [ ] Survey audio feature extraction for breathing/snoring analysis [requires-opus] [skill: analyze] [zero-resource]
   Why: Audio-based sleep monitoring depends on extracting discriminative features from respiratory sounds. Need to identify which features (mel-spectrogram, MFCC, spectral centroid, breathing rate periodicity, snoring event detection) are used in the literature and which best capture sleep stage transitions.

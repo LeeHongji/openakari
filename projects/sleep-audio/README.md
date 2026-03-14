@@ -29,6 +29,10 @@ A mobile sleep monitoring app that:
 
 ## Log
 
+### 2026-03-14 (session 10)
+
+Task-selected: Survey DL models for sleep stage classification. Produced `knowledge/dl-sleep-staging-survey.md` — comprehensive literature note covering 17 papers across 5 architecture families (CNN, CNN+RNN hybrid, Attention/Transformer, Lightweight/Edge, Non-EEG modality). Key findings: (1) dominant paradigm is CNN feature extraction + attention-based temporal context, (2) model compression to 0.049M params achieves 99.3% of full accuracy (DetectsleepNet-tiny), (3) non-EEG modalities plateau ~77% vs 82-88% for EEG, (4) audio-based sleep staging has minimal literature — this is the research gap. Recommendation for sleep-audio: CNN+Attention on mel-spectrograms with whole-cycle temporal modeling.
+
 ### 2026-03-14
 
 Project created. Mentor-initiated scaffold based on research plan: start with comprehensive literature survey on DL-based sleep stage classification from audio, then move to model exploration and mobile deployment feasibility.
