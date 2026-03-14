@@ -95,8 +95,6 @@ export interface QueryOpts {
   /** Extra environment variables to inject. */
   extraEnv?: Record<string, string>;
   onMessage?: (msg: SDKMessage) => void | Promise<void>;
-  /** If true, spawn with stdin pipe + --input-format stream-json for interactive multi-turn sessions. */
-  interactive?: boolean;
 }
 
 export interface QueryResult {
@@ -185,12 +183,6 @@ function cleanEnv(extra?: Record<string, string>): Record<string, string | undef
 function buildClaudeArgs(opts: QueryOpts): string[] {
   const args: string[] = ["-p", "--output-format", "stream-json", "--verbose"];
 
-  if (opts.interactive) {
-    args.push("--input-format", "stream-json");
-    // In interactive mode, do NOT pass --output-format twice, but we need it.
-    // The initial prompt will be sent via stdin after spawn, not as positional arg.
-  }
-
   if (opts.model) {
     args.push("--model", opts.model);
   }
@@ -229,11 +221,8 @@ function buildClaudeArgs(opts: QueryOpts): string[] {
     args.push("--system-prompt", opts.systemPrompt);
   }
 
-  // In interactive mode, the initial prompt is sent via stdin — not as positional arg.
-  // Otherwise claude -p treats it as a one-shot query and ignores stdin.
-  if (!opts.interactive) {
-    args.push(opts.prompt);
-  }
+  // Prompt is the positional argument
+  args.push(opts.prompt);
 
   return args;
 }
@@ -263,25 +252,11 @@ function spawnClaudeCli(
   const claudeBin = process.env.CLAUDE_BIN || "claude";
   console.log(`[claude-cli] Spawning: ${claudeBin} ${args.slice(0, 6).join(" ")} ... (cwd=${cwd})`);
 
-  const interactive = opts.interactive ?? false;
-
   const proc = spawn(claudeBin, args, {
     cwd,
-    stdio: [interactive ? "pipe" : "ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
     env: cleanEnv(opts.extraEnv) as Record<string, string>,
   });
-
-  // In interactive mode, send the initial prompt via stdin as a stream-json user message
-  if (interactive && proc.stdin) {
-    const initMsg = JSON.stringify({
-      type: "user",
-      message: { role: "user", content: opts.prompt },
-      parent_tool_use_id: null,
-      session_id: "",
-    }) + "\n";
-    proc.stdin.write(initMsg);
-    console.log(`[claude-cli] Sent initial prompt via stdin (${opts.prompt.length} chars)`);
-  }
 
   // Message queue for async iteration
   const messageQueue: SDKMessage[] = [];
@@ -329,14 +304,7 @@ function spawnClaudeCli(
         setTimeout(() => { if (!proc.killed) proc.kill("SIGKILL"); }, 5000);
       }
     },
-    ...(interactive && proc.stdin ? {
-      async streamInput(input: AsyncIterable<SDKUserMessage>) {
-        for await (const msg of input) {
-          const line = JSON.stringify(msg) + "\n";
-          proc.stdin!.write(line);
-        }
-      },
-    } : {}),
+    // streamInput not available when stdin is "ignore" — use --resume for multi-turn.
   };
 
   const result = new Promise<QueryResult>((resolve, reject) => {
