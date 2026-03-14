@@ -18,7 +18,7 @@
   Why: Mission gap — "measuring improvement over time" requires multiple data points. First snapshot done at 3 sessions. (per ADR 0049)
   Done when: Analysis file records M1-M5 at 8-10 sessions and compares trends against session-3 baseline.
   Priority: medium
-  [blocked-by: 8+ entries in sessions.jsonl]
+  [in-progress: 2026-03-14]
 
 - [x] Run bootstrap metrics snapshot (M1-M5 absolute counts) [fleet-eligible] [skill: analyze] [zero-resource]
   Why: Mission gap — no task for "measuring whether autonomy and knowledge output improve over time" (per ADR 0049). The measurement plan specifies bootstrap-phase metrics as absolute counts. 3 sessions of data now exist.
