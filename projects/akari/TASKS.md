@@ -68,7 +68,8 @@
 
 ## Mission gap tasks
 
-- [ ] Write self-improvement synthesis demonstrating the complete capability [requires-opus] [skill: analyze] [zero-resource]
+- [x] Write self-improvement synthesis demonstrating the complete capability [requires-opus] [skill: analyze] [zero-resource]
   Why: Mission gap — no artifact demonstrates the full self-improvement capability end-to-end (per ADR 0049). The Done when requires "demonstrates self-directed capability improvement."
   Done when: Analysis file ties together all evidence (2 completed loops, metrics, diagnoses) into a coherent narrative showing the system meets its Done when criteria.
   Priority: medium
+  Completed: 2026-03-14. See `analysis/self-improvement-synthesis-2026-03-14.md`. Synthesizes 3 self-improvement loops, M1-M5 trajectory, and evaluates all 3 Done-when conditions (2 satisfied, 1 partially satisfied pending second metrics snapshot).

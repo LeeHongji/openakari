@@ -14,6 +14,10 @@ The artifacts here are adapted from the original private akari repo's operationa
 
 ## Log
 
+### 2026-03-14 (session 9)
+
+Task-selected: Write self-improvement synthesis demonstrating the complete capability. Produced `analysis/self-improvement-synthesis-2026-03-14.md` — a capstone analysis tying together all 3 completed self-improvement loops (bootstrap orient overhead, knowledge accounting, orient measurement), M1-M5 metric trajectories, and a Done-when evaluation. Key results: M1 (gap detection) reached 3 original diagnoses, M2 (closure) at 100% (3/3 diagnoses led to code fixes), M3 (intervention) decreased 0.5→0.0, M5 (knowledge output) at 11 findings / $11.07 = 0.99 f/$. Two of three Done-when conditions fully satisfied; the third (measuring improvement over time) is partially satisfied pending the second metrics snapshot at 8-10 sessions. The recursive argument: the system designed its measurement plan, discovered its measurement was broken, fixed it, and continued — self-improvement of the self-improvement capability itself.
+
 ### 2026-03-14 (session 8)
 
 Task-selected: Diagnose persistent orient overhead (51.9% despite fast tier). This is self-improvement loop 3. Investigated why fast orient sessions average 51.6% overhead — worse than the original full orient (41.9%). Four root causes identified: (RC1) fast orient retains all high-cost steps — only low-cost reads are skipped, saving ~3 turns not ~13; (RC2) TodoWrite in EXECUTION_PHASE_TOOLS prematurely ends orientTurns counting, making reported overhead an understatement; (RC3) wasFullOrient threshold of 15 misclassifies 3/4 fast sessions as full, creating a feedback loop; (RC4) 20% overhead target is structurally unreachable when task phases are 12-20 turns. Implemented two code fixes: removed TodoWrite from EXECUTION_PHASE_TOOLS (sdk.ts) for accurate measurement, and raised wasFullOrient threshold from 15 to 25 (orient-tier.ts) to break misclassification loop. All 1703 scheduler tests pass (3 pre-existing evolution failures unrelated). Also generated 2 mission gap tasks: synthesis document and this diagnosis itself. See `diagnosis/orient-overhead-persistent.md`.
