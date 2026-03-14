@@ -19,7 +19,14 @@
   Priority: medium
   Completed: 2026-03-14. See `diagnosis/bootstrap-orient-overhead.md`.
 
-- [ ] Add one local example of a successful self-improvement loop [fleet-eligible] [skill: record] [zero-resource]
+- [x] Implement bootstrap orient optimization from diagnosis [requires-opus] [skill: execute] [zero-resource]
+  Why: Mission gap — no task for "implementing changes" based on diagnosed gaps (per ADR 0049). The bootstrap-orient-overhead diagnosis proposed skipping inapplicable orient checks when <5 sessions exist.
+  Done when: Orient skill includes bootstrap-mode logic that skips efficiency summary, cross-session patterns, fleet metrics, horizon-scan, and compound opportunity scanning when sessions.jsonl has <5 entries.
+  Priority: high
+  Completed: 2026-03-14. Added "Bootstrap detection" section to orient skill (SKILL.md) with skip conditions on 7 subsections.
+
+- [x] Add one local example of a successful self-improvement loop [fleet-eligible] [skill: record] [zero-resource]
   Why: The strongest evidence for the meta-project is a full loop: detect a gap, change the system, then measure improvement.
   Done when: README log entry or analysis file records a before/after operational improvement with provenance.
   Priority: medium
+  Completed: 2026-03-14. The bootstrap orient loop: diagnosed overhead (session 2) → implemented fix (session 3) → measurable via orient turns in future sessions. See README log.

@@ -14,6 +14,10 @@ The artifacts here are adapted from the original private akari repo's operationa
 
 ## Log
 
+### 2026-03-14 (session 3)
+
+Task-selected: Implement bootstrap orient optimization from diagnosis. Added a "Bootstrap detection" section to the orient skill that checks `sessions.jsonl` line count and skips 7 inapplicable steps when <5 sessions exist: efficiency summary, cross-session patterns, fleet metrics, horizon-scan, ledger reconciliation, compound opportunities, and (in fast orient) efficiency summary. This is the first complete self-improvement loop in the repo: session 2 diagnosed the bootstrap orient overhead problem (42% of turns, 0 findings), session 3 implemented the fix. Expected outcome: orient overhead drops from ~42% to ~20% of turns for bootstrap sessions. Measurement: compare `orientTurns / numTurns` in sessions 4+ against the 42% baseline from sessions 1-2. Also completed mission gap analysis, generating the implementation task itself (ADR 0049). Two tasks completed in one session: the implementation task and "Add one local example of a successful self-improvement loop" (this loop IS the example).
+
 ### 2026-03-14 (session 2)
 
 Task-selected: Write one self-observation diagnosis from operational evidence. Examined session metrics from run 345dloxm (the first automated session). Diagnosed "bootstrap orient overhead" — the orient procedure spent 42% of turns (18/43) in a near-empty repo, and the session produced 0 findings despite $1.44 cost. Root cause: orient doesn't scale down for bootstrap repos, and task selection favored meta-planning over direct observation. Proposed fix: skip inapplicable orient checks when <5 sessions exist. This is the first original diagnosis artifact (M1: 0 -> 1). See `diagnosis/bootstrap-orient-overhead.md`.

@@ -23,6 +23,20 @@ Orient has two tiers: **fast** (abbreviated, ~2-3 turns) and **full** (comprehen
   - If no scheduler directive is present and no explicit argument given, run full orient.
 - `/orient <project-name>` — run full orient scoped to that project
 
+## Bootstrap detection
+
+Before running any orient tier, check session count: count the lines in `.scheduler/metrics/sessions.jsonl` (or note if the file doesn't exist). If the count is **fewer than 5**, the repo is in **bootstrap mode**.
+
+In bootstrap mode, **skip** the following steps (they produce zero value with insufficient data):
+- **Efficiency summary**: Rates and trends are meaningless with <5 data points. Instead, report "Bootstrap mode: N sessions, skipping efficiency metrics."
+- **Cross-session pattern detection**: Requires 3+ occurrences in 10 sessions — impossible with <5.
+- **Fleet metrics**: No fleet baseline to compare against.
+- **Horizon-scan intel**: Skip reading `.scheduler/skill-reports/` — unlikely to exist at bootstrap.
+- **Compound opportunity scanning**: No accumulated experiments/diagnoses to compound yet (check anyway only if diagnosis files exist).
+- **Ledger reconciliation**: Skip unless `budget.yaml` and experiment `progress.json` files actually exist.
+
+This reduces orient overhead from ~42% to ~20% of session turns during the bootstrap phase. See `projects/akari/diagnosis/bootstrap-orient-overhead.md` for the analysis.
+
 ## Fast orient
 
 When running in fast mode, do only the following:
@@ -35,13 +49,13 @@ Read the following in parallel:
 1. `!git log --oneline -5` — recent activity
 2. `!git status` (reuse from step 0)
 3. `projects/*/TASKS.md` — for all active projects. Also read `projects/*/README.md` headers (first ~5 lines) to extract each project's `Priority:` field for project-level ranking (ADR 0036). Skip full READMEs, status.md, and roadmap.
-4. **Efficiency summary**: Read the last 10 work-cycle sessions from `.scheduler/metrics/sessions.jsonl` using `Read` with negative offset (e.g., offset=-15) to avoid reading the entire file. Compute and report these concrete metrics (not just flags):
+4. **Efficiency summary**: **Skip if bootstrap mode** (<5 sessions) — report "Bootstrap mode: N sessions, skipping efficiency metrics" instead. Otherwise, read the last 10 work-cycle sessions from `.scheduler/metrics/sessions.jsonl` using `Read` with negative offset (e.g., offset=-15) to avoid reading the entire file. Compute and report these concrete metrics (not just flags):
     - **Findings/dollar** (primary KPI): `(sum of newExperimentFindings + logEntryFindings) / sum of costUsd` across the 10 sessions. Compare to baseline: 1.29 f/$ overall (from 154 sessions through 2026-02-22). Flag if <0.5 f/$.
     - **Genuine waste rate**: Sessions where all `knowledge` fields sum to zero AND (`orphanedFiles` is 0 or absent) AND `filesChanged < 50` AND `backend != 'cursor'`. Report count and %. Flag if >10%.
     - **Orient overhead**: Mean `orientTurns / numTurns` for sessions with `numTurns > 10`. Report as %. Baseline: 42% (from 154 sessions). Flag if >40%.
     - **Avg cost/session**: Mean `costUsd`. Baseline: $3.66. Flag if >$8 (2× baseline).
     - **Avg turns**: Mean `numTurns`. Flag if >80.
-    
+
     **Fleet workers**: If this is a fleet session (check for `SESSION_ID=fleet-worker-` in prompt), compute fleet-specific KPIs instead of cost-based metrics:
     - **Task completion rate**: Fraction with `verification.hasCommit === true`. Target: ≥80%.
     - **Verification pass rate**: Fraction with both `hasCommit === true` AND `hasLogEntry === true`. Target: ≥70%.
@@ -134,12 +148,12 @@ Read the following in parallel:
 2. Group status: `docs/status.md`
 3. Project READMEs and TASKS — either the scoped project or all active projects: `projects/*/README.md` (for context, log, questions) and `projects/*/TASKS.md` (for task selection). **Extract each project's `Priority:` field** from its README (high | medium | low; absent = medium). This is used during project-level ranking (see "Rank tasks" below and ADR 0036). For **scoped** orient, also read domain knowledge files: `projects/<arg>/knowledge.md` (if it exists) and `projects/<arg>/knowledge/*.md` (if the directory exists) — domain knowledge should be in working context for task selection and execution planning. For all projects, check for `projects/<project>/decisions/` and read any files there — project-direction decisions (strategic pivots, methodology changes) inform task context and prevent re-litigating settled choices (per ADR 0035).
 4. For **every** active project (not just the scoped one): read `budget.yaml` and `ledger.yaml` (if they exist) to compute per-project budget/deadline status. This is required for the "Budget & Deadline Status" section of the output.
-5. **Ledger reconciliation**: For each active project with a `budget.yaml`, scan `projects/<project>/experiments/*/progress.json` for completed experiments that have a `consumption_audit` section. Compare the audit's `csv_derived_calls` (or `unique_derived_calls` if duplicates were detected) against `ledger_recorded`. Flag any experiment where `actual / recorded > 2` or `recorded / actual > 2` (i.e., ledger is off by more than 2×). Report these in the "Budget & Deadline Status" section as ledger reconciliation warnings. This catches phantom ledger entries — the flash-240 incident recorded 8,568 calls vs 39,222 actual (4.6× discrepancy) and went undetected for 16 hours because orient trusted the ledger. See [decisions/0027-experiment-resource-safeguards.md](../../../decisions/0027-experiment-resource-safeguards.md).
+5. **Ledger reconciliation**: **Skip if bootstrap mode** (<5 sessions) — unlikely to have experiment data to reconcile. Otherwise, for each active project with a `budget.yaml`, scan `projects/<project>/experiments/*/progress.json` for completed experiments that have a `consumption_audit` section. Compare the audit's `csv_derived_calls` (or `unique_derived_calls` if duplicates were detected) against `ledger_recorded`. Flag any experiment where `actual / recorded > 2` or `recorded / actual > 2` (i.e., ledger is off by more than 2×). Report these in the "Budget & Deadline Status" section as ledger reconciliation warnings. This catches phantom ledger entries — the flash-240 incident recorded 8,568 calls vs 39,222 actual (4.6× discrepancy) and went undetected for 16 hours because orient trusted the ledger. See [decisions/0027-experiment-resource-safeguards.md](../../../decisions/0027-experiment-resource-safeguards.md).
 6. Research roadmap: `docs/roadmap.md` — for active research questions and strategic priorities
-7. Cross-session patterns: Read `.scheduler/metrics/sessions.jsonl` (last 10 sessions, using `Read` with negative offset to avoid reading the entire file). Use the pattern detector (`infra/scheduler/src/patterns.ts`) logic to check for recurring violations: sessions without commits, zero-knowledge sessions, uncommitted files, missing log entries, timeouts, or cost anomalies. A pattern requires 3+ occurrences in the last 10 sessions. Report any detected patterns in the "Cross-session patterns" section of the output.
+7. Cross-session patterns: **Skip if bootstrap mode** (<5 sessions) — pattern detection requires 3+ occurrences, impossible with <5 sessions. Otherwise, read `.scheduler/metrics/sessions.jsonl` (last 10 sessions, using `Read` with negative offset to avoid reading the entire file). Use the pattern detector (`infra/scheduler/src/patterns.ts`) logic to check for recurring violations: sessions without commits, zero-knowledge sessions, uncommitted files, missing log entries, timeouts, or cost anomalies. A pattern requires 3+ occurrences in the last 10 sessions. Report any detected patterns in the "Cross-session patterns" section of the output.
 8. Model-fit awareness: If candidate tasks depend on model-specific behavior, flag uncertainty and recommend an empirical check rather than assuming capability.
-9. Horizon-scan intel: Check `.scheduler/skill-reports/horizon-scan-*.md` for recent scan reports (last 14 days). If any exist, read the most recent one and note: (a) actionable findings that created tasks or updated the model registry, (b) informative findings relevant to candidate tasks, (c) the scan date (to flag staleness if >14 days old). Report in the "Horizon-scan intel" section of the output. If no reports exist or all are >14 days old, note "No recent horizon-scan data."
-   10. **Efficiency summary**: From `.scheduler/metrics/sessions.jsonl` (reuse data from step 7), compute five metrics over the last 10 work-cycle sessions. Report concrete values with comparison to baselines (from `projects/akari/analysis/baseline-efficiency-report-2026-02-22.md`):
+9. Horizon-scan intel: **Skip if bootstrap mode** (<5 sessions) — unlikely to have scan reports at bootstrap. Otherwise, check `.scheduler/skill-reports/horizon-scan-*.md` for recent scan reports (last 14 days). If any exist, read the most recent one and note: (a) actionable findings that created tasks or updated the model registry, (b) informative findings relevant to candidate tasks, (c) the scan date (to flag staleness if >14 days old). Report in the "Horizon-scan intel" section of the output. If no reports exist or all are >14 days old, note "No recent horizon-scan data."
+   10. **Efficiency summary**: **Skip if bootstrap mode** (<5 sessions) — report "Bootstrap mode: N sessions, skipping efficiency metrics" instead. Otherwise, from `.scheduler/metrics/sessions.jsonl` (reuse data from step 7), compute five metrics over the last 10 work-cycle sessions. Report concrete values with comparison to baselines (from `projects/akari/analysis/baseline-efficiency-report-2026-02-22.md`):
      - **Findings/dollar** (primary KPI): `(sum of newExperimentFindings + logEntryFindings) / sum of costUsd`. Baseline: 1.29 f/$. Flag if <0.5 f/$.
      - **Genuine waste rate**: Count sessions where ALL `knowledge` fields sum to zero AND (`orphanedFiles` is 0 or absent) AND `filesChanged < 50` AND `backend != 'cursor'`. Baseline: 6.3%. Flag if >10%.
      - **Orient overhead**: Mean `orientTurns / numTurns` for sessions with `numTurns > 10`. Baseline: 42%. Flag if >40%. This is the single largest efficiency lever per baseline report Finding 2.
@@ -286,7 +300,7 @@ For the recommended task and its project, also evaluate:
 - **Budget state**: If the project has `budget.yaml`, is there remaining headroom for the recommended task?
 - **Decision debt**: Are there implicit choices being made that should be recorded in `decisions/` (system-wide) or `projects/<project>/decisions/` (project-direction, per ADR 0035)?
 - **Model-fit awareness**: If the recommended task depends on model capability, flag uncertainty and suggest an empirical check.
-- **Compound opportunities**: Check for recent `diagnosis-*.md` and `postmortem-*.md` files (last 14 days) in `projects/`. If any contain unactioned recommendations relevant to the recommended task, surface them so the session can address them during execution or the compound phase. Additionally, scan completed `EXPERIMENT.md` files for recommendation sections (headers matching: Recommendations, Proposed solutions, Proposal: ..., Implications..., Prevention, Next steps) that lack the `<!-- Recommendations surfaced: YYYY-MM-DD -->` marker. Report the count and experiment IDs — e.g., "3 completed experiments have unsurfaced recommendations: exp-a (2 actionable), exp-b (1 actionable). Consider running `/compound deep` to process them."
+- **Compound opportunities**: **Skip if bootstrap mode** (<5 sessions) unless diagnosis files already exist. Otherwise, check for recent `diagnosis-*.md` and `postmortem-*.md` files (last 14 days) in `projects/`. If any contain unactioned recommendations relevant to the recommended task, surface them so the session can address them during execution or the compound phase. Additionally, scan completed `EXPERIMENT.md` files for recommendation sections (headers matching: Recommendations, Proposed solutions, Proposal: ..., Implications..., Prevention, Next steps) that lack the `<!-- Recommendations surfaced: YYYY-MM-DD -->` marker. Report the count and experiment IDs — e.g., "3 completed experiments have unsurfaced recommendations: exp-a (2 actionable), exp-b (1 actionable). Consider running `/compound deep` to process them."
 
 ## Output format
 
