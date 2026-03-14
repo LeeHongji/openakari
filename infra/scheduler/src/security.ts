@@ -91,6 +91,14 @@ const PM2_STOP_PATTERNS = [
   /^pm2\s+delete\s+all\b/i,
 ];
 
+/** Destructive git operations that can corrupt history or lose work.
+ *  Applied per-segment (after splitting on shell operators). */
+const DANGEROUS_GIT_PATTERNS = [
+  /\bgit\s+push\s+.*(?:--force\b|-f\b)/i,
+  /\bgit\s+push\s+.*--force-with-lease\b/i,
+  /\bgit\s+reset\s+--hard\b/i,
+];
+
 /** Shells that are blocked by default but allowed for experiment launch (running .sh scripts). */
 const SHELL_EXECUTABLES = new Set(["bash", "sh", "zsh", "fish", "dash", "csh", "tcsh", "ksh"]);
 
@@ -204,6 +212,13 @@ export function validateShellCommand(cmd: string): void {
   for (const pattern of PM2_STOP_PATTERNS) {
     if (pattern.test(cmd)) {
       throw new SecurityError("Blocked command: pm2 stop/delete would terminate the scheduler itself. Use /api/restart instead.");
+    }
+  }
+
+  // Block destructive git operations (force push, hard reset) that can corrupt history
+  for (const pattern of DANGEROUS_GIT_PATTERNS) {
+    if (pattern.test(cmd)) {
+      throw new SecurityError("Blocked command: destructive git operation (force push or hard reset) is not allowed.");
     }
   }
 

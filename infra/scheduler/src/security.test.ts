@@ -114,6 +114,35 @@ describe("validateShellCommand", () => {
   it("includes helpful error message for pm2 stop", () => {
     expect(() => validateShellCommand("pm2 stop akari")).toThrow(/use \/api\/restart instead/i);
   });
+
+  it("blocks git push --force (history corruption)", () => {
+    expect(() => validateShellCommand("git push --force")).toThrow(SecurityError);
+    expect(() => validateShellCommand("git push --force origin main")).toThrow(SecurityError);
+    expect(() => validateShellCommand("git push -f origin main")).toThrow(SecurityError);
+    expect(() => validateShellCommand("git push --force-with-lease origin main")).toThrow(SecurityError);
+  });
+
+  it("blocks git push --force in pipelines", () => {
+    expect(() => validateShellCommand("git add . && git push --force")).toThrow(SecurityError);
+    expect(() => validateShellCommand("git commit -m 'x'; git push -f origin main")).toThrow(SecurityError);
+  });
+
+  it("allows normal git push", () => {
+    expect(() => validateShellCommand("git push")).not.toThrow();
+    expect(() => validateShellCommand("git push origin main")).not.toThrow();
+    expect(() => validateShellCommand("git push -u origin feature-branch")).not.toThrow();
+  });
+
+  it("blocks git reset --hard (destructive)", () => {
+    expect(() => validateShellCommand("git reset --hard")).toThrow(SecurityError);
+    expect(() => validateShellCommand("git reset --hard HEAD~1")).toThrow(SecurityError);
+    expect(() => validateShellCommand("git reset --hard origin/main")).toThrow(SecurityError);
+  });
+
+  it("allows safe git reset", () => {
+    expect(() => validateShellCommand("git reset HEAD file.txt")).not.toThrow();
+    expect(() => validateShellCommand("git reset --soft HEAD~1")).not.toThrow();
+  });
 });
 
 describe("checkMessageForPm2Violation", () => {

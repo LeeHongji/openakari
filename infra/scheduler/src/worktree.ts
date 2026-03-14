@@ -238,6 +238,17 @@ export async function mergeWorktree(
   info: WorktreeInfo,
 ): Promise<{ ok: boolean; error?: string }> {
   try {
+    // Pull latest main before merging to avoid conflicts from concurrent pushes
+    try {
+      await exec("git", ["pull", "--rebase", "--autostash", "origin", "main"], {
+        cwd: repoDir,
+        timeout: 30_000,
+      });
+    } catch {
+      // Pull failure is non-fatal — proceed with merge on current state
+      console.warn("[worktree] Pre-merge pull failed, proceeding with local state");
+    }
+
     // Merge into main
     await exec("git", ["merge", "--no-ff", "-m", `feat(evolution): ${info.description}`, info.branch], {
       cwd: repoDir,
