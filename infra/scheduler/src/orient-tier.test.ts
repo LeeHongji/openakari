@@ -128,10 +128,12 @@ describe("wasFullOrient", () => {
     expect(wasFullOrient(3)).toBe(false);
     expect(wasFullOrient(10)).toBe(false);
     expect(wasFullOrient(15)).toBe(false);
+    expect(wasFullOrient(16)).toBe(false);
+    expect(wasFullOrient(25)).toBe(false);
   });
 
   it("returns true for high turn count (full orient)", () => {
-    expect(wasFullOrient(16)).toBe(true);
+    expect(wasFullOrient(26)).toBe(true);
     expect(wasFullOrient(35)).toBe(true);
     expect(wasFullOrient(88)).toBe(true);
   });

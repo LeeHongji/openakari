@@ -124,8 +124,11 @@ export interface SupervisedQuery {
 
 // ── Orient turn tracker ─────────────────────────────────────────────────────
 
-/** Tools that signal the execution phase has started (post-orient). */
-const EXECUTION_PHASE_TOOLS = new Set(["Edit", "Write", "TodoWrite"]);
+/** Tools that signal the execution phase has started (post-orient).
+ *  TodoWrite is excluded — agents use it during orient for progress tracking,
+ *  which was prematurely ending orient turn counting. See diagnosis:
+ *  projects/akari/diagnosis/orient-overhead-persistent.md (RC2). */
+const EXECUTION_PHASE_TOOLS = new Set(["Edit", "Write"]);
 
 /** Tracks orient turn count from a stream of tool_use events.
  *  Exported for testing — call `onTool()` for each tool_use block in an assistant turn,

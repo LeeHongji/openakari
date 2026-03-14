@@ -84,12 +84,12 @@ describe("OrientTurnTracker", () => {
       expect(tracker.orientTurns).toBe(1);
     });
 
-    it("detects TodoWrite tool as execution phase start", () => {
+    it("does not detect TodoWrite as execution phase (used during orient for progress tracking)", () => {
       tracker.onNewTurn();
       tracker.onTool("Skill", { skill: "orient" });
       tracker.onNewTurn();
       tracker.onTool("TodoWrite", { todos: [] });
-      expect(tracker.orientTurns).toBe(1);
+      expect(tracker.orientTurns).toBeUndefined();
     });
 
     it("does not detect Read as execution phase", () => {

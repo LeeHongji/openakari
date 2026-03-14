@@ -57,3 +57,18 @@
   Done when: verify.ts scans analysis and diagnosis files for `### Finding N:` headers, test cases added, and at least one subsequent session correctly records non-zero findings.
   Priority: high
   Completed: 2026-03-14. Added blocks 7b/7c to parseKnowledgeFromDiff() for analysis and diagnosis files, updated parseCrossProjectMetrics for per-project counting, 6 new test cases (81 total), all passing. Verification of non-zero findings requires a subsequent session.
+
+## Self-improvement loop 3: Orient overhead
+
+- [x] Diagnose persistent orient overhead (51.9% despite fast tier) [requires-opus] [skill: diagnose] [zero-resource]
+  Why: Fast orient was supposed to reduce overhead from ~42% to ~20%, but 6-session average is 51.9%. The orient procedure is the system's largest efficiency bottleneck — every percent saved compounds across all future sessions.
+  Done when: Diagnosis file identifies root causes of high orient overhead in fast tier, cites per-session evidence (orientTurns/numTurns), and proposes concrete fixes.
+  Priority: high
+  Completed: 2026-03-14. See `diagnosis/orient-overhead-persistent.md`. 4 root causes: (RC1) fast orient retains all high-cost steps, (RC2) TodoWrite prematurely stops orientTurns counter, (RC3) wasFullOrient threshold of 15 misclassifies fast sessions, (RC4) 20% target structurally unreachable. Implemented Fix A (remove TodoWrite from EXECUTION_PHASE_TOOLS) and Fix B (raise threshold to 25). Tests updated and passing.
+
+## Mission gap tasks
+
+- [ ] Write self-improvement synthesis demonstrating the complete capability [requires-opus] [skill: analyze] [zero-resource]
+  Why: Mission gap — no artifact demonstrates the full self-improvement capability end-to-end (per ADR 0049). The Done when requires "demonstrates self-directed capability improvement."
+  Done when: Analysis file ties together all evidence (2 completed loops, metrics, diagnoses) into a coherent narrative showing the system meets its Done when criteria.
+  Priority: medium

@@ -3,7 +3,10 @@
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
 
-const FAST_ORIENT_TURNS_THRESHOLD = 15;
+/** Full orient produces 18-24 turns; fast orient produces 13-21 turns.
+ *  Previous threshold of 15 misclassified 3/4 fast sessions as full.
+ *  See diagnosis: projects/akari/diagnosis/orient-overhead-persistent.md (RC3). */
+const FAST_ORIENT_TURNS_THRESHOLD = 25;
 
 export interface TierSignals {
   lastFullOrientAt: number | null;

@@ -14,6 +14,10 @@ The artifacts here are adapted from the original private akari repo's operationa
 
 ## Log
 
+### 2026-03-14 (session 8)
+
+Task-selected: Diagnose persistent orient overhead (51.9% despite fast tier). This is self-improvement loop 3. Investigated why fast orient sessions average 51.6% overhead — worse than the original full orient (41.9%). Four root causes identified: (RC1) fast orient retains all high-cost steps — only low-cost reads are skipped, saving ~3 turns not ~13; (RC2) TodoWrite in EXECUTION_PHASE_TOOLS prematurely ends orientTurns counting, making reported overhead an understatement; (RC3) wasFullOrient threshold of 15 misclassifies 3/4 fast sessions as full, creating a feedback loop; (RC4) 20% overhead target is structurally unreachable when task phases are 12-20 turns. Implemented two code fixes: removed TodoWrite from EXECUTION_PHASE_TOOLS (sdk.ts) for accurate measurement, and raised wasFullOrient threshold from 15 to 25 (orient-tier.ts) to break misclassification loop. All 1703 scheduler tests pass (3 pre-existing evolution failures unrelated). Also generated 2 mission gap tasks: synthesis document and this diagnosis itself. See `diagnosis/orient-overhead-persistent.md`.
+
 ### 2026-03-14 (session 7)
 
 Task-selected: Fix knowledge accounting to count findings in analysis and diagnosis files. Implemented the fix diagnosed in session 6: added blocks 7b (analysis files) and 7c (diagnosis files) to `parseKnowledgeFromDiff()` in `infra/scheduler/src/verify.ts` to scan for `### Finding N:` headers. Also updated `parseCrossProjectMetrics()` to count these findings per project. TDD approach: wrote 6 failing tests first, then implemented. All 81 knowledge tests pass. This completes the second self-improvement loop (knowledge accounting): diagnose (session 6) → implement fix (session 7). Verification that subsequent sessions correctly record non-zero findings will happen in session 8+.
