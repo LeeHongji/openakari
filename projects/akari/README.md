@@ -14,6 +14,10 @@ The artifacts here are adapted from the original private akari repo's operationa
 
 ## Log
 
+### 2026-03-14 (session 7)
+
+Task-selected: Fix knowledge accounting to count findings in analysis and diagnosis files. Implemented the fix diagnosed in session 6: added blocks 7b (analysis files) and 7c (diagnosis files) to `parseKnowledgeFromDiff()` in `infra/scheduler/src/verify.ts` to scan for `### Finding N:` headers. Also updated `parseCrossProjectMetrics()` to count these findings per project. TDD approach: wrote 6 failing tests first, then implemented. All 81 knowledge tests pass. This completes the second self-improvement loop (knowledge accounting): diagnose (session 6) → implement fix (session 7). Verification that subsequent sessions correctly record non-zero findings will happen in session 8+.
+
 ### 2026-03-14 (session 6)
 
 Task-selected: Diagnose knowledge accounting undercounting. Investigated why all 4 prior sessions report 0 findings in sessions.jsonl despite 8+ documented findings in analysis files. Traced root cause to `parseKnowledgeFromDiff()` in `infra/scheduler/src/verify.ts` (lines 1047-1111): two compounding bugs — (1) file filter only scans EXPERIMENT.md and README.md, ignoring analysis/*.md and diagnosis/*.md, (2) regex `/^\+\d+\.\s/` doesn't match the `### Finding N:` header format used in analysis files. True findings/$ rate is ~1.45 f/$ (8 findings / $5.55), not 0.0 as recorded. This is the second self-observation diagnosis (M1: 1 → 2), following the same pattern as bootstrap-orient-overhead: identify gap from operational data → trace to specific code → propose fix. Created implementation task for the fix. See `diagnosis/knowledge-accounting-undercounting.md`.

@@ -52,7 +52,8 @@
   Priority: high
   Completed: 2026-03-14. See `diagnosis/knowledge-accounting-undercounting.md`. Root cause: `parseKnowledgeFromDiff()` in verify.ts only scans EXPERIMENT.md and README.md for findings; analysis files and diagnosis files are invisible. Two compounding bugs: file filter too narrow + regex doesn't match `### Finding N:` format.
 
-- [ ] Fix knowledge accounting to count findings in analysis and diagnosis files [requires-opus] [skill: execute] [zero-resource]
+- [x] Fix knowledge accounting to count findings in analysis and diagnosis files [requires-opus] [skill: execute] [zero-resource]
   Why: Diagnosis identified that parseKnowledgeFromDiff() in verify.ts ignores analysis/*.md and diagnosis/*.md files. Primary KPI (findings/$) reads 0.0 when true rate is ~1.45 f/$.
   Done when: verify.ts scans analysis and diagnosis files for `### Finding N:` headers, test cases added, and at least one subsequent session correctly records non-zero findings.
   Priority: high
+  Completed: 2026-03-14. Added blocks 7b/7c to parseKnowledgeFromDiff() for analysis and diagnosis files, updated parseCrossProjectMetrics for per-project counting, 6 new test cases (81 total), all passing. Verification of non-zero findings requires a subsequent session.

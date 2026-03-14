@@ -1110,6 +1110,28 @@ export function parseKnowledgeFromDiff(
     }
   }
 
+  // 7b. Findings in analysis files (projects/*/analysis/*.md) — ### Finding N: headers
+  for (const block of diffBlocks) {
+    const file = blockFile(block);
+    if (!/^projects\/[^/]+\/analysis\/.*\.md$/.test(file)) continue;
+    for (const line of block.split("\n")) {
+      if (/^\+###\s+Finding\s+\d+/.test(line)) {
+        result.logEntryFindings++;
+      }
+    }
+  }
+
+  // 7c. Findings in diagnosis files (projects/*/diagnosis/*.md) — ### Finding N: headers
+  for (const block of diffBlocks) {
+    const file = blockFile(block);
+    if (!/^projects\/[^/]+\/diagnosis\/.*\.md$/.test(file)) continue;
+    for (const line of block.split("\n")) {
+      if (/^\+###\s+Finding\s+\d+/.test(line)) {
+        result.logEntryFindings++;
+      }
+    }
+  }
+
   // 8. Infrastructure source code changes (infra/**/*.ts|py|js, excluding tests and configs)
   const infraSourceRe = /^infra\/.*\.(ts|py|js)$/;
   const testFileRe = /\.(test|spec)\.(ts|js|py)$|_test\.(ts|js|py)$|\/test_[^/]+\.py$/;
@@ -1212,6 +1234,10 @@ export function parseCrossProjectMetrics(
         findingCount++;
       }
       if (filePath.endsWith("README.md") && /^\+\d+\.\s/.test(line) && !/^\+- \[[ x]\]/.test(line)) {
+        findingCount++;
+      }
+      // ### Finding N: headers in analysis and diagnosis files
+      if ((/\/analysis\/.*\.md$/.test(filePath) || /\/diagnosis\/.*\.md$/.test(filePath)) && /^\+###\s+Finding\s+\d+/.test(line)) {
         findingCount++;
       }
     }

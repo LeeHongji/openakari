@@ -620,6 +620,105 @@ diff --git a/projects/akari/README.md b/projects/akari/README.md
     ], new Set());
     expect(result.diagnosesCompleted).toBe(0);
   });
+
+  // ── NEW: findings in analysis and diagnosis files (### Finding N: headers) ──
+
+  it("counts ### Finding N: headers in analysis file diffs", () => {
+    const diff = `diff --git a/projects/akari/analysis/bootstrap-metrics.md b/projects/akari/analysis/bootstrap-metrics.md
+--- /dev/null
++++ b/projects/akari/analysis/bootstrap-metrics.md
+@@ -0,0 +1,15 @@
++# Bootstrap Metrics Snapshot
++
++### Finding 1: Orient overhead unchanged by fast tier
++The fast orient tier did not reduce overhead percentage.
++
++### Finding 2: Knowledge accounting undercounts
++Sessions record 0 findings despite producing analysis artifacts.
++
++### Finding 3: Self-improvement loop completed in 2 sessions
++The bootstrap orient optimization was a full detect-implement-measure loop.
+`;
+    const result = parseKnowledgeFromDiff(diff, [
+      "projects/akari/analysis/bootstrap-metrics.md",
+    ], new Set(["projects/akari/analysis/bootstrap-metrics.md"]));
+    expect(result.logEntryFindings).toBe(3);
+  });
+
+  it("counts ### Finding N: headers in diagnosis file diffs", () => {
+    const diff = `diff --git a/projects/akari/diagnosis/knowledge-accounting.md b/projects/akari/diagnosis/knowledge-accounting.md
+--- /dev/null
++++ b/projects/akari/diagnosis/knowledge-accounting.md
+@@ -0,0 +1,10 @@
++# Diagnosis: Knowledge Accounting
++
++### Finding 1: File filter too narrow
++Only EXPERIMENT.md and README.md are scanned.
++
++### Finding 2: Regex format mismatch
++Analysis files use headers, not numbered lists.
+`;
+    const result = parseKnowledgeFromDiff(diff, [
+      "projects/akari/diagnosis/knowledge-accounting.md",
+    ], new Set(["projects/akari/diagnosis/knowledge-accounting.md"]));
+    expect(result.logEntryFindings).toBe(2);
+  });
+
+  it("does not count ### Finding headers in README.md (already covered by existing logic)", () => {
+    const diff = `diff --git a/projects/akari/README.md b/projects/akari/README.md
+@@ -15,0 +15,5 @@
++### 2026-03-14 — Session summary
++
++### Finding 1: Something discovered
++This is a finding in a README log entry.
+`;
+    const result = parseKnowledgeFromDiff(diff, [
+      "projects/akari/README.md",
+    ]);
+    // README findings are counted by the existing numbered-list logic (block 7),
+    // not the ### Finding N: header logic. This test ensures no double-counting.
+    expect(result.logEntryFindings).toBe(0);
+  });
+
+  it("counts findings from analysis files in a mixed commit", () => {
+    const diff = `diff --git a/projects/akari/experiments/test/EXPERIMENT.md b/projects/akari/experiments/test/EXPERIMENT.md
+@@ -10,0 +11,2 @@
++1. Experiment finding one.
++2. Experiment finding two.
+diff --git a/projects/akari/analysis/intervention-rate.md b/projects/akari/analysis/intervention-rate.md
+--- /dev/null
++++ b/projects/akari/analysis/intervention-rate.md
+@@ -0,0 +1,8 @@
++# Human Intervention Rate
++
++### Finding 1: Interventions are infrastructure-only
++No research-directed human interventions observed.
++
++### Finding 2: Rate decreased over time
++Window A: 0.5, Window B: 0.0.
+`;
+    const result = parseKnowledgeFromDiff(diff, [
+      "projects/akari/experiments/test/EXPERIMENT.md",
+      "projects/akari/analysis/intervention-rate.md",
+    ], new Set(["projects/akari/analysis/intervention-rate.md"]));
+    expect(result.newExperimentFindings).toBe(2);
+    expect(result.logEntryFindings).toBe(2);
+    expect(result.newAnalysisFiles).toBe(1);
+  });
+
+  it("does not count ### Finding headers in non-analysis/diagnosis files", () => {
+    const diff = `diff --git a/projects/akari/knowledge/domain-facts.md b/projects/akari/knowledge/domain-facts.md
+@@ -0,0 +1,5 @@
++# Domain Facts
++
++### Finding 1: Not a real finding
++This is in a knowledge file, not analysis or diagnosis.
+`;
+    const result = parseKnowledgeFromDiff(diff, [
+      "projects/akari/knowledge/domain-facts.md",
+    ], new Set(["projects/akari/knowledge/domain-facts.md"]));
+    expect(result.logEntryFindings).toBe(0);
+  });
 });
 
 // ── Cross-project utilization metrics ────────────────────────────────────────
@@ -711,6 +810,22 @@ describe("parseCrossProjectMetrics", () => {
 
     const result = parseCrossProjectMetrics(diff, ["projects/akari/analysis/test.md"]);
     expect(result.crossProjectRefs).toBe(2);
+  });
+
+  it("counts ### Finding N: headers in analysis files per project", () => {
+    const diff = [
+      "diff --git a/projects/akari/analysis/metrics.md b/projects/akari/analysis/metrics.md",
+      "+### Finding 1: Orient overhead unchanged",
+      "+### Finding 2: Knowledge accounting undercounts",
+      "diff --git a/projects/sample-project/diagnosis/crash-report.md b/projects/sample-project/diagnosis/crash-report.md",
+      "+### Finding 1: Root cause identified",
+    ].join("\n");
+
+    const result = parseCrossProjectMetrics(diff, [
+      "projects/akari/analysis/metrics.md",
+      "projects/sample-project/diagnosis/crash-report.md",
+    ]);
+    expect(result.findingsPerProject).toEqual({ akari: 2, "sample-project": 1 });
   });
 
   it("combines findings from experiment and readme in same project", () => {
