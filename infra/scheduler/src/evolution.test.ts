@@ -53,13 +53,29 @@ describe("checkPendingEvolution", () => {
     });
   });
 
-  it("rejects files outside infra/scheduler/src/", async () => {
+  it("rejects files outside allowed paths", async () => {
     await writePending(testDir, validPending({
       filesChanged: ["infra/scheduler/src/cli.ts", "projects/akari/README.md"],
     }));
     const result = await checkPendingEvolution(testDir);
     expect(result.shouldRestart).toBe(false);
-    expect(result.error).toMatch(/outside infra\/scheduler\/src/);
+    expect(result.error).toMatch(/outside allowed paths/);
+  });
+
+  it("allows .claude/skills/ files", async () => {
+    await writePending(testDir, validPending({
+      filesChanged: [".claude/skills/orient/SKILL.md"],
+    }));
+    const result = await checkPendingEvolution(testDir);
+    expect(result.shouldRestart).toBe(true);
+  });
+
+  it("allows mixed scheduler + skills files", async () => {
+    await writePending(testDir, validPending({
+      filesChanged: ["infra/scheduler/src/chat/chat.ts", ".claude/skills/develop/SKILL.md"],
+    }));
+    const result = await checkPendingEvolution(testDir);
+    expect(result.shouldRestart).toBe(true);
   });
 
   it("rejects when tscPassed is false", async () => {

@@ -151,27 +151,43 @@ export async function validateWorktree(
   const errors: string[] = [];
   const worktreeSchedulerDir = join(info.path, "infra", "scheduler");
 
-  // TypeScript type check
+  // Determine if scheduler code was modified (needs tsc + vitest)
+  let hasSchedulerChanges = false;
   try {
-    await exec("npx", ["tsc", "--noEmit"], {
-      cwd: worktreeSchedulerDir,
-      timeout: 60_000,
+    const { stdout } = await exec("git", ["diff", "--name-only", "main...HEAD"], {
+      cwd: info.path,
+      timeout: 10_000,
     });
-  } catch (err) {
-    const e = err as { stdout?: string; stderr?: string };
-    errors.push(`tsc --noEmit failed: ${(e.stderr ?? e.stdout ?? "").slice(0, 500)}`);
+    hasSchedulerChanges = stdout.split("\n").some((f) => f.startsWith("infra/scheduler/src/"));
+  } catch {
+    hasSchedulerChanges = true; // assume yes on error
   }
 
-  // Test suite
-  try {
-    await exec("npx", ["vitest", "run", "--exclude", "**/evolution.test.ts", "--exclude", "dist/**", "--exclude", "node_modules/**"], {
-      cwd: worktreeSchedulerDir,
-      timeout: 120_000,
-      env: { ...process.env, AKARI_EVOLUTION_IN_PROGRESS: "1" },
-    });
-  } catch (err) {
-    const e = err as { stdout?: string; stderr?: string };
-    errors.push(`Tests failed: ${(e.stderr ?? e.stdout ?? "").slice(0, 500)}`);
+  // TypeScript type check (only if scheduler code changed)
+  if (hasSchedulerChanges) {
+    try {
+      await exec("npx", ["tsc", "--noEmit"], {
+        cwd: worktreeSchedulerDir,
+        timeout: 60_000,
+      });
+    } catch (err) {
+      const e = err as { stdout?: string; stderr?: string };
+      errors.push(`tsc --noEmit failed: ${(e.stderr ?? e.stdout ?? "").slice(0, 500)}`);
+    }
+
+    // Test suite
+    try {
+      await exec("npx", ["vitest", "run", "--exclude", "**/evolution.test.ts", "--exclude", "dist/**", "--exclude", "node_modules/**"], {
+        cwd: worktreeSchedulerDir,
+        timeout: 120_000,
+        env: { ...process.env, AKARI_EVOLUTION_IN_PROGRESS: "1" },
+      });
+    } catch (err) {
+      const e = err as { stdout?: string; stderr?: string };
+      errors.push(`Tests failed: ${(e.stderr ?? e.stdout ?? "").slice(0, 500)}`);
+    }
+  } else {
+    console.log(`[worktree] No scheduler code changes — skipping tsc and vitest`);
   }
 
   // Security: check for sensitive file modifications

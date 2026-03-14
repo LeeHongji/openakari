@@ -279,6 +279,12 @@ export function buildSessionBlocks(
   const emoji = result.ok ? ":white_check_mark:" : ":x:";
   const duration = Math.round(result.durationMs / 1000);
 
+  const costStr = result.costUsd !== undefined ? `$${result.costUsd.toFixed(2)}` : "n/a";
+  const turnsStr = result.numTurns !== undefined ? `${result.numTurns}` : "n/a";
+  const nextRunStr = job.state.nextRunAtMs
+    ? new Date(job.state.nextRunAtMs).toLocaleTimeString("en-US", { hour12: false, timeZone: "Asia/Shanghai" })
+    : "—";
+
   const blocks: Record<string, unknown>[] = [
     {
       type: "header",
@@ -289,9 +295,10 @@ export function buildSessionBlocks(
       fields: [
         { type: "mrkdwn", text: `*Job:*\n${job.name}` },
         { type: "mrkdwn", text: `*Duration:*\n${duration}s` },
-        { type: "mrkdwn", text: `*Model:*\n${job.payload.model ?? "default"}` },
-        { type: "mrkdwn", text: `*Backend:*\n${result.backend ?? "unknown"}` },
+        { type: "mrkdwn", text: `*Cost:*\n${costStr}` },
+        { type: "mrkdwn", text: `*Turns:*\n${turnsStr}` },
         { type: "mrkdwn", text: `*Run #:*\n${job.state.runCount + 1}` },
+        { type: "mrkdwn", text: `*Next run:*\n${nextRunStr}` },
       ],
     },
   ];

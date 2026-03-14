@@ -207,7 +207,28 @@ describe("buildSessionBlocks", () => {
   it("shows default when backend is undefined", () => {
     const blocks = buildSessionBlocks(makeJob(), makeResult({ backend: undefined }), []);
     const json = JSON.stringify(blocks);
-    expect(json).toContain("Backend");
+    expect(json).toContain("n/a");
+  });
+
+  it("includes cost and turns in session fields", () => {
+    const blocks = buildSessionBlocks(makeJob(), makeResult({ costUsd: 1.53, numTurns: 38 }), []);
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("$1.53");
+    expect(json).toContain("38");
+  });
+
+  it("shows n/a when cost and turns are undefined", () => {
+    const blocks = buildSessionBlocks(makeJob(), makeResult(), []);
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("n/a");
+  });
+
+  it("includes next run time", () => {
+    const nextRunMs = Date.now() + 1800_000; // 30 min from now
+    const job = makeJob({ state: { nextRunAtMs: nextRunMs, lastRunAtMs: null, lastStatus: null, lastError: null, lastDurationMs: null, runCount: 0 } });
+    const blocks = buildSessionBlocks(job, makeResult(), []);
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("Next run");
   });
 });
 

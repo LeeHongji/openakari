@@ -99,14 +99,18 @@ export async function checkPendingEvolution(
     };
   }
 
-  // Validate: all changed files must be under infra/scheduler/src/
+  // Validate: all changed files must be under allowed paths
+  const ALLOWED_EVOLUTION_PATHS = [
+    "infra/scheduler/src/",
+    ".claude/skills/",
+  ];
   const invalidFiles = pending.filesChanged.filter(
-    (f) => !f.startsWith("infra/scheduler/src/"),
+    (f) => !ALLOWED_EVOLUTION_PATHS.some((prefix) => f.startsWith(prefix)),
   );
   if (invalidFiles.length > 0) {
     return {
       shouldRestart: false,
-      error: `Evolution rejected: files outside infra/scheduler/src/: ${invalidFiles.join(", ")}`,
+      error: `Evolution rejected: files outside allowed paths (${ALLOWED_EVOLUTION_PATHS.join(", ")}): ${invalidFiles.join(", ")}`,
     };
   }
 
