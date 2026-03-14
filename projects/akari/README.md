@@ -14,6 +14,10 @@ The artifacts here are adapted from the original private akari repo's operationa
 
 ## Log
 
+### 2026-03-14 (session 5)
+
+Task-selected: Measure human intervention rate in your deployment. Analyzed all 11 git commits and APPROVAL_QUEUE.md across 4 prior sessions. Classified each commit by author type (human/agent/scheduler) using timestamp correlation with sessions.jsonl. Computed M3 over two 2-session windows: Window A (sessions 1-2) = 0.5 interventions/session, Window B (sessions 3-4) = 0.0. Four findings: (1) both human interventions were infrastructure-only (repo setup, scheduler bugfix), zero research-direction interventions, (2) rate trajectory 0.5→0.0 matches expected bootstrap pattern, (3) cross-validation with M5 confirms low intervention reflects genuine autonomy not silent failure, (4) Co-Authored-By tag is unreliable for distinguishing human-initiated vs autonomous commits. Also generated mission gap task for second metrics snapshot at 8-10 sessions. See `analysis/human-intervention-rate-2026-03-14.md`.
+
 ### 2026-03-14 (session 4)
 
 Task-selected: Run bootstrap metrics snapshot (M1-M5 absolute counts). Generated this task via mission gap analysis (no existing task for "measuring improvement over time"). Computed all 5 metrics from measurement plan using absolute counts: M1=1 original diagnosis, M2=1/1 closure (100%), M3=0.33 interventions/session (only initial commit), M4=1/3 sessions touched system files, M5=2 original knowledge artifacts ($0.74/artifact). Three findings: (1) fast orient tier didn't reduce overhead percentage (45% vs 42%) — bootstrap skip fix should help, (2) sessions.jsonl knowledge counters undercount actual output (0 findings recorded vs 2 artifacts produced), (3) self-improvement loop completed in minimum 2 sessions. See `analysis/bootstrap-metrics-snapshot-2026-03-14.md`.
