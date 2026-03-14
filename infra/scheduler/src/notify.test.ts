@@ -192,22 +192,10 @@ describe("buildSessionBlocks", () => {
     ...overrides,
   });
 
-  it("includes backend in session completion fields", () => {
-    const blocks = buildSessionBlocks(makeJob(), makeResult({ backend: "cursor" }), []);
+  it("includes job name in session completion fields", () => {
+    const blocks = buildSessionBlocks(makeJob(), makeResult(), []);
     const json = JSON.stringify(blocks);
-    expect(json).toContain("cursor");
-  });
-
-  it("includes claude backend", () => {
-    const blocks = buildSessionBlocks(makeJob(), makeResult({ backend: "claude" }), []);
-    const json = JSON.stringify(blocks);
-    expect(json).toContain("claude");
-  });
-
-  it("shows default when backend is undefined", () => {
-    const blocks = buildSessionBlocks(makeJob(), makeResult({ backend: undefined }), []);
-    const json = JSON.stringify(blocks);
-    expect(json).toContain("n/a");
+    expect(json).toContain("test-session");
   });
 
   it("includes cost and turns in session fields", () => {
