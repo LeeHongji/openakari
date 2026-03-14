@@ -458,10 +458,30 @@ function spawnChatAsync(
       onMessage: chatModeInterceptor ?? buildChatMessageHandler(callbacks, handleRef, progressState, repoDir, convKey, conv, threadContext),
     }));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[chat] Failed to spawn agent for ${convKey}: ${msg}`);
-    callbacks.onComplete(`:warning: The scheduler is restarting — please try again in a moment.`).catch(() => {});
-    return null;
+    // If resume was attempted and failed, clear it and retry without resume
+    if (conv.resumeSessionId) {
+      console.warn(`[chat] Resume failed for session ${conv.resumeSessionId}, retrying without resume: ${err instanceof Error ? err.message : String(err)}`);
+      conv.resumeSessionId = null;
+      try {
+        ({ sessionId, handle, result } = spawnAgent({
+          profile: AGENT_PROFILES.chat,
+          prompt,
+          cwd: repoDir,
+          disallowedTools: channelMode === "chat" ? ["Edit", "Write", "NotebookEdit", "Bash"] : undefined,
+          onMessage: chatModeInterceptor ?? buildChatMessageHandler(callbacks, handleRef, progressState, repoDir, convKey, conv, threadContext),
+        }));
+      } catch (retryErr) {
+        const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        console.error(`[chat] Failed to spawn agent for ${convKey}: ${msg}`);
+        callbacks.onComplete(`:warning: The scheduler is restarting — please try again in a moment.`).catch(() => {});
+        return null;
+      }
+    } else {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[chat] Failed to spawn agent for ${convKey}: ${msg}`);
+      callbacks.onComplete(`:warning: The scheduler is restarting — please try again in a moment.`).catch(() => {});
+      return null;
+    }
   }
 
   handleRef.handle = handle;
@@ -540,6 +560,11 @@ function spawnChatAsync(
       return;
     }
     conv.activeSessionId = null;
+    // Clear resume ID on error — the session may have expired or be invalid
+    if (conv.resumeSessionId) {
+      console.log(`[chat] Clearing resumeSessionId on error (was ${conv.resumeSessionId})`);
+      conv.resumeSessionId = null;
+    }
 
     const text = `Sorry, I hit an error: ${err instanceof Error ? err.message : String(err)}`;
     addMessage(conv, "assistant", text);
